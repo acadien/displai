@@ -1,0 +1,239 @@
+use displai::*;
+
+// Helper to create a fresh white buffer
+fn new_buffer() -> Vec<u32> {
+    vec![WHITE; WIDTH * HEIGHT]
+}
+
+// ===================
+// Title Bar Rendering Tests
+// ===================
+
+#[test]
+fn test_draw_button_fills_area() {
+    let mut buffer = new_buffer();
+    let bx = 50;
+    let by = 50;
+
+    draw_button(&mut buffer, bx, by, RED);
+
+    // All pixels in button area should be RED
+    for y in by..by + BUTTON_SIZE {
+        for x in bx..bx + BUTTON_SIZE {
+            assert_eq!(buffer[y * WIDTH + x], RED);
+        }
+    }
+
+    // Pixel just outside should still be white
+    assert_eq!(buffer[by * WIDTH + (bx + BUTTON_SIZE)], WHITE);
+}
+
+#[test]
+fn test_draw_title_bar_covers_top() {
+    let mut buffer = new_buffer();
+
+    draw_title_bar(&mut buffer);
+
+    // Title bar area should be gray (except close button)
+    let mid_x = WIDTH / 2;
+    let mid_y = TITLE_BAR_HEIGHT / 2;
+    assert_eq!(buffer[mid_y * WIDTH + mid_x], GRAY);
+
+    // Bottom border should be dark gray
+    assert_eq!(buffer[(TITLE_BAR_HEIGHT - 1) * WIDTH + mid_x], DARK_GRAY);
+}
+
+#[test]
+fn test_title_bar_only_has_close_button() {
+    let mut buffer = new_buffer();
+
+    draw_title_bar(&mut buffer);
+
+    // Close button should be present (red with white X)
+    let close_x = WIDTH - BUTTON_SIZE - BUTTON_MARGIN;
+    let close_y = BUTTON_MARGIN;
+    assert_eq!(buffer[(close_y + 1) * WIDTH + (close_x + 1)], RED);
+
+    // Area where color buttons used to be should now be gray
+    let color_btn_area_x = BUTTON_MARGIN + BUTTON_SIZE / 2;
+    let color_btn_area_y = BUTTON_MARGIN + BUTTON_SIZE / 2;
+    assert_eq!(buffer[color_btn_area_y * WIDTH + color_btn_area_x], GRAY);
+}
+
+#[test]
+fn test_close_button_is_red() {
+    let mut buffer = new_buffer();
+
+    draw_title_bar(&mut buffer);
+
+    // Close button center should be red (before X is drawn over it)
+    // Actually the X is white, so check a corner pixel
+    let close_x = WIDTH - BUTTON_SIZE - BUTTON_MARGIN;
+    let close_y = BUTTON_MARGIN;
+
+    // Check a pixel that's in the button but not part of the X
+    // The X has padding of 6, so corners should still be red
+    assert_eq!(buffer[(close_y + 1) * WIDTH + (close_x + 1)], RED);
+}
+
+// ===================
+// Bottom Toolbar Rendering Tests
+// ===================
+
+#[test]
+fn test_draw_bottom_toolbar_covers_bottom() {
+    let mut buffer = new_buffer();
+
+    draw_bottom_toolbar(&mut buffer, 0, false, 1);
+
+    // Bottom toolbar area should be filled
+    let mid_x = WIDTH / 2;
+
+    // Check row 1 (color buttons row) background
+    let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN + BUTTON_SIZE + 2;
+    // This might be in a gap, so just check it's not white (original buffer)
+    // Actually let's check the top border
+    assert_eq!(buffer[CANVAS_BOTTOM * WIDTH + mid_x], DARK_GRAY);
+}
+
+#[test]
+fn test_all_13_palette_colors_rendered() {
+    let mut buffer = new_buffer();
+
+    draw_bottom_toolbar(&mut buffer, 0, false, 1);
+
+    // Verify each of the 13 color buttons shows its corresponding color
+    let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
+    for i in 0..13 {
+        let bx = BUTTON_MARGIN + i * (BUTTON_SIZE + BUTTON_MARGIN);
+
+        // Check center of button (avoid border pixels)
+        let center_x = bx + BUTTON_SIZE / 2;
+        let center_y = row1_y + BUTTON_SIZE / 2;
+        assert_eq!(
+            buffer[center_y * WIDTH + center_x],
+            COLOR_PALETTE[i],
+            "Button {} does not show correct color",
+            i
+        );
+    }
+}
+
+#[test]
+fn test_selected_color_has_white_border() {
+    let mut buffer = new_buffer();
+
+    // Select color index 5
+    draw_bottom_toolbar(&mut buffer, 5, false, 1);
+
+    let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
+
+    // Button 5 should have white border
+    let btn5_x = BUTTON_MARGIN + 5 * (BUTTON_SIZE + BUTTON_MARGIN);
+    let border_pixel_5 = buffer[row1_y * WIDTH + btn5_x];
+    assert_eq!(border_pixel_5, WHITE);
+
+    // Button 0 should have dark gray border (not selected)
+    let border_pixel_0 = buffer[row1_y * WIDTH + BUTTON_MARGIN];
+    assert_eq!(border_pixel_0, DARK_GRAY);
+}
+
+#[test]
+fn test_eraser_active_deselects_colors() {
+    let mut buffer = new_buffer();
+
+    // Eraser active with color 5 selected
+    draw_bottom_toolbar(&mut buffer, 5, true, 1);
+
+    let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
+
+    // Button 5 should NOT have white border when eraser is active
+    let btn5_x = BUTTON_MARGIN + 5 * (BUTTON_SIZE + BUTTON_MARGIN);
+    let border_pixel_5 = buffer[row1_y * WIDTH + btn5_x];
+    assert_eq!(border_pixel_5, DARK_GRAY);
+
+    // Eraser button should have blue border
+    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
+    let eraser_x = BUTTON_MARGIN;
+    let eraser_border = buffer[row2_y * WIDTH + eraser_x];
+    assert_eq!(eraser_border, 0x4040E0); // Blue
+}
+
+#[test]
+fn test_eraser_button_rendered() {
+    let mut buffer = new_buffer();
+
+    draw_bottom_toolbar(&mut buffer, 0, false, 1);
+
+    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
+    let eraser_x = BUTTON_MARGIN;
+
+    // Eraser button background should be white
+    let center_x = eraser_x + BUTTON_SIZE / 2;
+    let center_y = row2_y + BUTTON_SIZE / 2;
+    // The center might have the E icon (black), so check a corner
+    assert_eq!(buffer[(row2_y + 1) * WIDTH + (eraser_x + 1)], WHITE);
+}
+
+#[test]
+fn test_plus_minus_buttons_rendered() {
+    let mut buffer = new_buffer();
+
+    draw_bottom_toolbar(&mut buffer, 0, false, 5);
+
+    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
+    let eraser_x = BUTTON_MARGIN;
+    let size_display_x = eraser_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
+    let minus_x = size_display_x + 44 + BUTTON_MARGIN;
+    let plus_x = minus_x + BUTTON_SIZE + BUTTON_MARGIN;
+
+    // Minus button should be dark gray background
+    assert_eq!(buffer[(row2_y + 1) * WIDTH + (minus_x + 1)], DARK_GRAY);
+
+    // Plus button should be dark gray background
+    assert_eq!(buffer[(row2_y + 1) * WIDTH + (plus_x + 1)], DARK_GRAY);
+}
+
+#[test]
+fn test_size_display_rendered() {
+    let mut buffer = new_buffer();
+
+    draw_bottom_toolbar(&mut buffer, 0, false, 10);
+
+    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
+    let eraser_x = BUTTON_MARGIN;
+    let size_display_x = eraser_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
+
+    // Size display should have white background
+    let center_x = size_display_x + 20;
+    let center_y = row2_y + BUTTON_SIZE / 2;
+    // The number might be rendered here, check near edge
+    assert_eq!(buffer[(row2_y + 1) * WIDTH + (size_display_x + 1)], WHITE);
+
+    // Border should be dark gray
+    assert_eq!(buffer[row2_y * WIDTH + size_display_x], DARK_GRAY);
+}
+
+#[test]
+fn test_canvas_area_dimensions() {
+    // Verify canvas area is correctly defined
+    assert_eq!(CANVAS_TOP, TITLE_BAR_HEIGHT);
+    assert_eq!(CANVAS_TOP, 30);
+    assert_eq!(CANVAS_BOTTOM, HEIGHT - BOTTOM_TOOLBAR_HEIGHT);
+    assert_eq!(CANVAS_BOTTOM, 540);
+    assert_eq!(BOTTOM_TOOLBAR_HEIGHT, 60);
+    assert_eq!(TOOLBAR_ROW_HEIGHT, 30);
+}
+
+#[test]
+fn test_color_palette_has_13_colors() {
+    assert_eq!(COLOR_PALETTE.len(), 13);
+    assert_eq!(COLOR_PALETTE[0], BLACK); // First color should be black
+}
+
+#[test]
+fn test_brush_size_constants() {
+    assert_eq!(MIN_BRUSH_SIZE, 1);
+    assert_eq!(MAX_BRUSH_SIZE, 20);
+    assert_eq!(DEFAULT_BRUSH_SIZE, 1);
+}
