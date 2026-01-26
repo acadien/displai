@@ -1,0 +1,8 @@
+[package]
+name = "displai"
+version = "0.0.1"
+edition = "2021"
+description = "A whiteboard-style drawing application"
+
+[dependencies]
+minifb = "0.25"
