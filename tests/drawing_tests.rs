@@ -270,3 +270,103 @@ fn test_draw_circle_at_various_sizes() {
     // Center should definitely be black after all those circles
     assert_eq!(buffer[300 * WIDTH + 400], BLACK);
 }
+
+// Helper to count non-white pixels in a buffer
+fn count_drawn_pixels(buffer: &[u32]) -> usize {
+    buffer.iter().filter(|&&pixel| pixel != WHITE).count()
+}
+
+#[test]
+fn test_brush_size_increase_draws_more_pixels() {
+    let cx = 400;
+    let cy = 300;
+    let mut prev_pixel_count = 0;
+
+    // Test that increasing brush size draws more pixels
+    for size in MIN_BRUSH_SIZE..=MAX_BRUSH_SIZE {
+        let mut buffer = new_buffer();
+        draw_circle(&mut buffer, cx, cy, size, BLACK);
+        let pixel_count = count_drawn_pixels(&buffer);
+
+        assert!(
+            pixel_count >= prev_pixel_count,
+            "Brush size {} drew {} pixels, but size {} drew {} pixels (should be >= previous)",
+            size,
+            pixel_count,
+            size - 1,
+            prev_pixel_count
+        );
+
+        prev_pixel_count = pixel_count;
+    }
+}
+
+#[test]
+fn test_brush_size_decrease_draws_fewer_pixels() {
+    let cx = 400;
+    let cy = 300;
+    let mut prev_pixel_count = usize::MAX;
+
+    // Test that decreasing brush size draws fewer pixels
+    for size in (MIN_BRUSH_SIZE..=MAX_BRUSH_SIZE).rev() {
+        let mut buffer = new_buffer();
+        draw_circle(&mut buffer, cx, cy, size, BLACK);
+        let pixel_count = count_drawn_pixels(&buffer);
+
+        assert!(
+            pixel_count <= prev_pixel_count,
+            "Brush size {} drew {} pixels, but size {} drew {} pixels (should be <= previous)",
+            size,
+            pixel_count,
+            size + 1,
+            prev_pixel_count
+        );
+
+        prev_pixel_count = pixel_count;
+    }
+}
+
+#[test]
+fn test_brush_size_pixel_count_progression() {
+    let cx = 400;
+    let cy = 300;
+
+    // Collect pixel counts for all sizes
+    let mut pixel_counts: Vec<(usize, usize)> = Vec::new();
+
+    for size in MIN_BRUSH_SIZE..=MAX_BRUSH_SIZE {
+        let mut buffer = new_buffer();
+        draw_circle(&mut buffer, cx, cy, size, BLACK);
+        let count = count_drawn_pixels(&buffer);
+        pixel_counts.push((size, count));
+    }
+
+    // Verify STRICTLY increasing pixel counts for each size increase
+    // Each brush size should draw MORE pixels than the previous size
+    for i in 1..pixel_counts.len() {
+        let (prev_size, prev_count) = pixel_counts[i - 1];
+        let (curr_size, curr_count) = pixel_counts[i];
+
+        assert!(
+            curr_count > prev_count,
+            "Brush size {} drew {} pixels, same as size {} ({} pixels). Each size increase should draw more pixels!",
+            curr_size,
+            curr_count,
+            prev_size,
+            prev_count
+        );
+    }
+
+    // Verify size 1 draws exactly 1 pixel
+    assert_eq!(
+        pixel_counts[0].1, 1,
+        "Brush size 1 should draw exactly 1 pixel, got {}",
+        pixel_counts[0].1
+    );
+
+    // Verify max size draws more than min size
+    assert!(
+        pixel_counts.last().unwrap().1 > pixel_counts[0].1,
+        "Max brush size should draw more pixels than min size"
+    );
+}

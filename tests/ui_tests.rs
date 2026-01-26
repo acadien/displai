@@ -89,10 +89,7 @@ fn test_draw_bottom_toolbar_covers_bottom() {
     // Bottom toolbar area should be filled
     let mid_x = WIDTH / 2;
 
-    // Check row 1 (color buttons row) background
-    let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN + BUTTON_SIZE + 2;
-    // This might be in a gap, so just check it's not white (original buffer)
-    // Actually let's check the top border
+    // Check the top border of the toolbar
     assert_eq!(buffer[CANVAS_BOTTOM * WIDTH + mid_x], DARK_GRAY);
 }
 
@@ -168,10 +165,7 @@ fn test_eraser_button_rendered() {
     let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
     let eraser_x = BUTTON_MARGIN;
 
-    // Eraser button background should be white
-    let center_x = eraser_x + BUTTON_SIZE / 2;
-    let center_y = row2_y + BUTTON_SIZE / 2;
-    // The center might have the E icon (black), so check a corner
+    // Eraser button background should be white (check corner to avoid E icon)
     assert_eq!(buffer[(row2_y + 1) * WIDTH + (eraser_x + 1)], WHITE);
 }
 
@@ -204,10 +198,7 @@ fn test_size_display_rendered() {
     let eraser_x = BUTTON_MARGIN;
     let size_display_x = eraser_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
 
-    // Size display should have white background
-    let center_x = size_display_x + 20;
-    let center_y = row2_y + BUTTON_SIZE / 2;
-    // The number might be rendered here, check near edge
+    // Size display should have white background (check near edge to avoid number)
     assert_eq!(buffer[(row2_y + 1) * WIDTH + (size_display_x + 1)], WHITE);
 
     // Border should be dark gray

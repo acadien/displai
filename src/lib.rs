@@ -448,9 +448,9 @@ pub fn draw_number(buffer: &mut [u32], x: usize, y: usize, num: usize) {
 }
 
 pub fn draw_circle(buffer: &mut [u32], cx: usize, cy: usize, size: usize, color: u32) {
-    let radius = ((size as isize) - 1) / 2;
+    let radius = (size as isize) - 1;
     if radius <= 0 {
-        // Size 1 or 2: draw single pixel
+        // Size 1: draw single pixel
         set_pixel(buffer, cx, cy, color);
         return;
     }
