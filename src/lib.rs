@@ -1,4 +1,7 @@
 use minifb::{Key, MouseButton, MouseMode, Window, WindowOptions};
+use std::io::{self, BufRead, Write};
+use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::thread;
 
 pub const WIDTH: usize = 800;
 pub const HEIGHT: usize = 600;
@@ -38,6 +41,219 @@ pub const MIN_BRUSH_SIZE: usize = 1;
 pub const MAX_BRUSH_SIZE: usize = 20;
 pub const DEFAULT_BRUSH_SIZE: usize = 1;
 
+/// Commands that can be sent via stdin
+#[derive(Debug, Clone, PartialEq)]
+pub enum Command {
+    Snapshot,
+    Color(usize),
+    Eraser(bool),
+    Size(usize),
+    Stroke {
+        x1: usize,
+        y1: usize,
+        x2: usize,
+        y2: usize,
+    },
+    Dot {
+        x: usize,
+        y: usize,
+    },
+    Clear,
+    State,
+}
+
+/// Parse a command string into a Command enum
+pub fn parse_command(input: &str) -> Option<Command> {
+    let input = input.trim();
+    let parts: Vec<&str> = input.split_whitespace().collect();
+
+    if parts.is_empty() {
+        return None;
+    }
+
+    match parts[0] {
+        "snapshot" => Some(Command::Snapshot),
+        "clear" => Some(Command::Clear),
+        "state" => Some(Command::State),
+        "color" => {
+            if parts.len() >= 2 {
+                parts[1]
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|&i| i < COLOR_PALETTE.len())
+                    .map(Command::Color)
+            } else {
+                None
+            }
+        }
+        "eraser" => {
+            if parts.len() >= 2 {
+                match parts[1] {
+                    "on" => Some(Command::Eraser(true)),
+                    "off" => Some(Command::Eraser(false)),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        }
+        "size" => {
+            if parts.len() >= 2 {
+                parts[1]
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|&s| (MIN_BRUSH_SIZE..=MAX_BRUSH_SIZE).contains(&s))
+                    .map(Command::Size)
+            } else {
+                None
+            }
+        }
+        "stroke" => {
+            // stroke x1,y1 x2,y2
+            if parts.len() >= 3 {
+                let p1: Vec<&str> = parts[1].split(',').collect();
+                let p2: Vec<&str> = parts[2].split(',').collect();
+                if p1.len() == 2 && p2.len() == 2 {
+                    let x1 = p1[0].parse::<usize>().ok()?;
+                    let y1 = p1[1].parse::<usize>().ok()?;
+                    let x2 = p2[0].parse::<usize>().ok()?;
+                    let y2 = p2[1].parse::<usize>().ok()?;
+                    Some(Command::Stroke { x1, y1, x2, y2 })
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        "dot" => {
+            // dot x,y
+            if parts.len() >= 2 {
+                let coords: Vec<&str> = parts[1].split(',').collect();
+                if coords.len() == 2 {
+                    let x = coords[0].parse::<usize>().ok()?;
+                    let y = coords[1].parse::<usize>().ok()?;
+                    Some(Command::Dot { x, y })
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Execute a command, modifying the buffer and/or state
+/// Returns an optional response string to print to stdout
+pub fn execute_command(
+    cmd: &Command,
+    buffer: &mut [u32],
+    selected_color_index: &mut usize,
+    eraser_active: &mut bool,
+    brush_size: &mut usize,
+) -> Option<String> {
+    match cmd {
+        Command::Snapshot => {
+            if let Err(e) = save_canvas_png(buffer, "canvas.png") {
+                Some(format!("error: {}", e))
+            } else {
+                Some("saved canvas.png".to_string())
+            }
+        }
+        Command::Color(index) => {
+            *selected_color_index = *index;
+            *eraser_active = false;
+            None
+        }
+        Command::Eraser(on) => {
+            *eraser_active = *on;
+            None
+        }
+        Command::Size(size) => {
+            *brush_size = *size;
+            None
+        }
+        Command::Stroke { x1, y1, x2, y2 } => {
+            let color = if *eraser_active {
+                WHITE
+            } else {
+                COLOR_PALETTE[*selected_color_index]
+            };
+            draw_brush_line(buffer, *x1, *y1, *x2, *y2, color, *brush_size);
+            None
+        }
+        Command::Dot { x, y } => {
+            let color = if *eraser_active {
+                WHITE
+            } else {
+                COLOR_PALETTE[*selected_color_index]
+            };
+            draw_circle(buffer, *x, *y, *brush_size, color);
+            None
+        }
+        Command::Clear => {
+            clear_canvas(buffer);
+            None
+        }
+        Command::State => Some(format!(
+            "color:{} eraser:{} size:{}",
+            *selected_color_index,
+            if *eraser_active { "on" } else { "off" },
+            *brush_size
+        )),
+    }
+}
+
+/// Save the canvas portion of the buffer to a PNG file
+pub fn save_canvas_png(buffer: &[u32], path: &str) -> Result<(), String> {
+    use image::{ImageBuffer, Rgb};
+
+    let canvas_height = CANVAS_BOTTOM - CANVAS_TOP;
+    let mut img: ImageBuffer<Rgb<u8>, Vec<u8>> =
+        ImageBuffer::new(WIDTH as u32, canvas_height as u32);
+
+    for y in 0..canvas_height {
+        for x in 0..WIDTH {
+            let pixel = buffer[(y + CANVAS_TOP) * WIDTH + x];
+            let r = ((pixel >> 16) & 0xFF) as u8;
+            let g = ((pixel >> 8) & 0xFF) as u8;
+            let b = (pixel & 0xFF) as u8;
+            img.put_pixel(x as u32, y as u32, Rgb([r, g, b]));
+        }
+    }
+
+    img.save(path).map_err(|e| e.to_string())
+}
+
+/// Clear the canvas area to white
+pub fn clear_canvas(buffer: &mut [u32]) {
+    for y in CANVAS_TOP..CANVAS_BOTTOM {
+        for x in 0..WIDTH {
+            buffer[y * WIDTH + x] = WHITE;
+        }
+    }
+}
+
+/// Spawn a thread that reads lines from stdin and sends them to the receiver
+fn spawn_stdin_reader() -> Receiver<String> {
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let stdin = io::stdin();
+        let reader = stdin.lock();
+
+        for line in reader.lines().map_while(Result::ok) {
+            if tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
+
+    rx
+}
+
 pub fn run() {
     let mut buffer: Vec<u32> = vec![WHITE; WIDTH * HEIGHT];
 
@@ -53,7 +269,31 @@ pub fn run() {
     let mut eraser_active: bool = false;
     let mut brush_size: usize = DEFAULT_BRUSH_SIZE;
 
+    // Start stdin reader thread for command protocol
+    let stdin_rx = spawn_stdin_reader();
+
     while window.is_open() && !window.is_key_down(Key::Escape) {
+        // Process any stdin commands (non-blocking)
+        loop {
+            match stdin_rx.try_recv() {
+                Ok(line) => {
+                    if let Some(cmd) = parse_command(&line) {
+                        if let Some(response) = execute_command(
+                            &cmd,
+                            &mut buffer,
+                            &mut selected_color_index,
+                            &mut eraser_active,
+                            &mut brush_size,
+                        ) {
+                            println!("{}", response);
+                            let _ = io::stdout().flush();
+                        }
+                    }
+                }
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => break,
+            }
+        }
         draw_title_bar(&mut buffer);
         draw_bottom_toolbar(&mut buffer, selected_color_index, eraser_active, brush_size);
 

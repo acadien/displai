@@ -6,3 +6,4 @@ description = "A whiteboard-style drawing application"
 
 [dependencies]
 minifb = "0.25"
+image = "0.25"
