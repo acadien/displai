@@ -84,9 +84,9 @@ Before any code changes can be committed:
 
 ## Architecture
 
-**displai** is a whiteboard-style drawing application built with Rust and minifb (minimal framebuffer library).
+**displai** is a whiteboard-style drawing application built with Rust and minifb, featuring AI interaction via Claude through a Unix socket interface.
 
-### Current Implementation (v0.0)
+### Current Implementation (v0.1)
 
 - `src/lib.rs` - Core logic, all public functions and constants
 - `src/main.rs` - Entry point, calls `displai::run()`
