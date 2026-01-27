@@ -4,11 +4,65 @@ Ever wished you could interact with an AI through ... drawing? Well look no furt
 
 ## Getting Started
 
-TODO: Add installation and usage instructions.
+### Install
+
+```bash
+git clone https://github.com/acadien/displai.git
+cd displai
+cargo build --release
+```
+
+### Run
+
+```bash
+cargo run --release
+```
+
+A drawing window opens. Draw with your mouse. That's it.
+
+### Connect an AI agent
+
+displai listens on a Unix socket at `/tmp/displai.sock`. Any agent (or script) can send commands:
+
+```bash
+echo "state" | nc -U /tmp/displai.sock
+# → color:0 eraser:off size:1
+
+echo "stroke 100,100 300,200" | nc -U /tmp/displai.sock
+echo "snapshot" | nc -U /tmp/displai.sock
+# → saves canvas.png
+```
+
+**Available commands:**
+
+| Command | Description |
+|---|---|
+| `snapshot` | Save canvas to `canvas.png` |
+| `color <0-12>` | Select color from palette |
+| `eraser on\|off` | Toggle eraser |
+| `size <1-20>` | Set brush size |
+| `stroke x1,y1 x2,y2` | Draw line between points |
+| `dot x,y` | Draw single dot |
+| `clear` | Clear canvas to white |
+| `state` | Get current color, eraser, and size |
+
+### Use with Claude Code
+
+Start displai, then ask Claude things like:
+
+- **"What did I draw?"** - Claude snapshots the canvas and describes it
+- **"Draw a blue circle in the top right"** - Claude sends stroke commands to draw
+- **"Change the cat's color to orange"** - Claude snapshots, finds the element, erases and redraws it
+- **"Add a tree next to the house"** - Claude reads the canvas and draws new elements in context
+- **"Draw a chart of population growth"** - Claude generates data visualizations directly on canvas
+
+The agent sees the canvas via `snapshot` and draws via `stroke`/`dot` commands. It's a shared whiteboard between you and the AI.
 
 ## License
 
-TODO: Add license information.
+Licensed under the Business Source License 1.1 (BSL). See [LICENSE](LICENSE) for the full text.
+
+**TL;DR:** You can view, modify, and use this code for any non-commercial purpose. Commercial use requires a license from the author. On **January 27, 2029**, the license automatically converts to Apache 2.0, making it fully open source.
 
 ## Examples
 
