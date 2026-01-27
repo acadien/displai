@@ -1,5 +1,6 @@
 use minifb::{Key, MouseButton, MouseMode, Window, WindowOptions};
 use std::io::{self, BufRead, Write};
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 
@@ -254,6 +255,52 @@ fn spawn_stdin_reader() -> Receiver<String> {
     rx
 }
 
+pub const SOCKET_PATH: &str = "/tmp/displai.sock";
+
+/// A command received from the socket, with the stream to write the response back to
+struct SocketCommand {
+    line: String,
+    stream: UnixStream,
+}
+
+/// Spawn a thread that listens on a Unix socket and sends received commands to the receiver
+fn spawn_unix_socket_listener() -> Receiver<SocketCommand> {
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        // Remove stale socket file if it exists
+        let _ = std::fs::remove_file(SOCKET_PATH);
+
+        if let Ok(listener) = UnixListener::bind(SOCKET_PATH) {
+            for stream in listener.incoming().flatten() {
+                let tx = tx.clone();
+                // Handle each connection in its own thread to avoid blocking
+                thread::spawn(move || {
+                    let mut stream_for_response = stream.try_clone().ok();
+                    let reader = io::BufReader::new(stream);
+                    for line in reader.lines().map_while(Result::ok) {
+                        if let Some(response_stream) = stream_for_response.take() {
+                            if tx
+                                .send(SocketCommand {
+                                    line,
+                                    stream: response_stream,
+                                })
+                                .is_err()
+                            {
+                                return;
+                            }
+                            // Only handle first line per connection for request/response pattern
+                            return;
+                        }
+                    }
+                });
+            }
+        }
+    });
+
+    rx
+}
+
 pub fn run() {
     let mut buffer: Vec<u32> = vec![WHITE; WIDTH * HEIGHT];
 
@@ -271,6 +318,8 @@ pub fn run() {
 
     // Start stdin reader thread for command protocol
     let stdin_rx = spawn_stdin_reader();
+    // Start Unix socket listener thread
+    let socket_rx = spawn_unix_socket_listener();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         // Process any stdin commands (non-blocking)
@@ -288,6 +337,33 @@ pub fn run() {
                             println!("{}", response);
                             let _ = io::stdout().flush();
                         }
+                    }
+                }
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => break,
+            }
+        }
+
+        // Process any Unix socket commands (non-blocking)
+        loop {
+            match socket_rx.try_recv() {
+                Ok(socket_cmd) => {
+                    let mut stream = socket_cmd.stream;
+                    if let Some(cmd) = parse_command(&socket_cmd.line) {
+                        let response = execute_command(
+                            &cmd,
+                            &mut buffer,
+                            &mut selected_color_index,
+                            &mut eraser_active,
+                            &mut brush_size,
+                        );
+                        if let Some(resp) = response {
+                            let _ = writeln!(stream, "{}", resp);
+                        } else {
+                            let _ = writeln!(stream, "ok");
+                        }
+                    } else {
+                        let _ = writeln!(stream, "error: unknown command");
                     }
                 }
                 Err(TryRecvError::Empty) => break,

@@ -98,9 +98,11 @@ Before any code changes can be committed:
 
 ### UI Elements
 
-- **Title bar**: Gray bar at top with buttons
+- **Title bar**: Gray bar at top with close button
 - **Close button (X)**: Red button in top-right corner, exits application
-- **Color toggle button**: Top-left corner, shows current pen color, click to toggle between black and red
+- **Bottom toolbar**: Two rows containing:
+  - Row 1: 13 color palette buttons
+  - Row 2: Eraser button, brush size display, +/- size buttons
 
 ### Rendering Pattern
 
@@ -114,21 +116,43 @@ Immediate mode rendering with a simple game loop:
 
 - `WIDTH`/`HEIGHT`: Canvas dimensions (800x600)
 - `TITLE_BAR_HEIGHT`: 30 pixels
+- `BOTTOM_TOOLBAR_HEIGHT`: 60 pixels
 - `BUTTON_SIZE`: 24 pixels
-- Colors: `WHITE`, `BLACK`, `GRAY`, `DARK_GRAY`, `RED`, `BLUE`
+- `COLOR_PALETTE`: 13 colors
+- `MIN_BRUSH_SIZE`/`MAX_BRUSH_SIZE`: 1-20 pixels
+- `SOCKET_PATH`: `/tmp/displai.sock`
+
+### Command Protocol
+
+Control via Unix socket (`/tmp/displai.sock`) or stdin:
+
+```
+snapshot              -> saves canvas.png, returns "saved canvas.png"
+color <0-12>          -> select color from palette
+eraser on|off         -> toggle eraser mode
+size <1-20>           -> set brush size
+stroke x1,y1 x2,y2    -> draw line between points
+dot x,y               -> draw single dot at position
+clear                 -> clear canvas to white
+state                 -> returns "color:N eraser:on|off size:N"
+```
 
 ## Roadmap
 
-### Version 0.1 (Planned)
-- Eraser tool
-- Undo/redo functionality
+### Version 0.1 (Current)
+- ✅ 13-color palette
+- ✅ Brush sizes 1-20
+- ✅ Eraser tool
+- ✅ Command protocol (stdin + Unix socket)
+- ✅ PNG snapshot export
 
 ### Version 0.2 (Planned)
-- Color picker
-- Multiple brush types (sizes, shapes)
+- Undo/redo functionality
+- Shape tools (rectangle, circle, line)
 
 ### Version 0.3 (Planned)
 - Collaboration features (multi-user drawing)
+- Layer support
 
 ### Version 0.4 (Planned)
-- Direct AI interaction (Claude integration)
+- Enhanced AI interaction (autonomous drawing, image understanding)
