@@ -1,6 +1,6 @@
 # displai
 
-A displai project.
+Ever wished you could interact with an AI through ... drawing? Well look no further. This vibe coded slop generates a drawing window that your agent can interact with through a simple unix socket.
 
 ## Getting Started
 
