@@ -122,7 +122,7 @@ Immediate mode rendering with a simple game loop:
 - `TITLE_BAR_HEIGHT`: 30 pixels
 - `BOTTOM_TOOLBAR_HEIGHT`: 60 pixels
 - `BUTTON_SIZE`: 24 pixels
-- `COLOR_PALETTE`: 13 colors
+- `COLOR_PALETTE`: 14 colors (Black, White, Red, Red-Orange, Orange, Yellow, Yellow-Green, Green, Cyan-Green, Cyan, Blue, Blue-Violet, Violet, Magenta)
 - `MIN_BRUSH_SIZE`/`MAX_BRUSH_SIZE`: 1-20 pixels
 - `SOCKET_PATH`: `/tmp/displai.sock`
 
@@ -132,29 +132,41 @@ Control via Unix socket (`/tmp/displai.sock`) or stdin:
 
 ```
 snapshot              -> saves canvas.png, returns "saved canvas.png"
-color <0-12>          -> select color from palette
-eraser on|off         -> toggle eraser mode
+color <0-13>          -> select edge color from palette (0=Black, 1=White acts as eraser)
 size <1-20>           -> set brush size
-stroke x1,y1 x2,y2    -> draw line between points
+stroke x1,y1 x2,y2    -> draw brush stroke between points
 dot x,y               -> draw single dot at position
 clear                 -> clear canvas to white
-state                 -> returns "color:N eraser:on|off size:N"
+state                 -> returns "edge:N fill:N|none size:N"
+
+# Shape commands (use current edge/fill colors and brush size)
+line x1,y1 x2,y2      -> draw line between two points
+square x,y size       -> draw square at top-left corner with side length
+rect x1,y1 x2,y2      -> draw rectangle with corners at points
+circle x,y r          -> draw circle at center with radius
+oval x,y rx,ry        -> draw oval at center with x/y radii
+triangle x1,y1 x2,y2  -> draw triangle in bounding box
 ```
 
 ## Roadmap
 
-### Version 0.1 (Current)
+### Version 0.1
 - ✅ 13-color palette
 - ✅ Brush sizes 1-20
 - ✅ Eraser tool
 - ✅ Command protocol (stdin + Unix socket)
 - ✅ PNG snapshot export
 
-### Version 0.2 (Planned)
-- Shape tools (rectangle, circle, line)
+### Version 0.2 (Current)
+- ✅ 14-color palette (Black, White + 12 colors)
+- ✅ Edge/fill color system with transparent option
+- ✅ Shape tools (line, square, rectangle, circle, oval, triangle)
+- ✅ Shape socket commands
+- ✅ Clear canvas button
 
 ### Version 0.3 (Planned)
 - Undo/redo functionality
+- Polygon support
 - Collaboration features (multi-user drawing)
 - Layer support
 

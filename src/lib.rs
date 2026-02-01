@@ -74,6 +74,41 @@ pub enum Command {
     },
     Clear,
     State,
+    // Shape commands
+    Line {
+        x1: usize,
+        y1: usize,
+        x2: usize,
+        y2: usize,
+    },
+    Square {
+        x: usize,
+        y: usize,
+        size: usize,
+    },
+    Rect {
+        x1: usize,
+        y1: usize,
+        x2: usize,
+        y2: usize,
+    },
+    Circle {
+        x: usize,
+        y: usize,
+        r: usize,
+    },
+    Oval {
+        x: usize,
+        y: usize,
+        rx: usize,
+        ry: usize,
+    },
+    Triangle {
+        x1: usize,
+        y1: usize,
+        x2: usize,
+        y2: usize,
+    },
 }
 
 /// Parse a command string into a Command enum
@@ -144,6 +179,110 @@ pub fn parse_command(input: &str) -> Option<Command> {
                 None
             }
         }
+        "line" => {
+            // line x1,y1 x2,y2
+            if parts.len() >= 3 {
+                let p1: Vec<&str> = parts[1].split(',').collect();
+                let p2: Vec<&str> = parts[2].split(',').collect();
+                if p1.len() == 2 && p2.len() == 2 {
+                    let x1 = p1[0].parse::<usize>().ok()?;
+                    let y1 = p1[1].parse::<usize>().ok()?;
+                    let x2 = p2[0].parse::<usize>().ok()?;
+                    let y2 = p2[1].parse::<usize>().ok()?;
+                    Some(Command::Line { x1, y1, x2, y2 })
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        "square" => {
+            // square x,y size
+            if parts.len() >= 3 {
+                let coords: Vec<&str> = parts[1].split(',').collect();
+                if coords.len() == 2 {
+                    let x = coords[0].parse::<usize>().ok()?;
+                    let y = coords[1].parse::<usize>().ok()?;
+                    let size = parts[2].parse::<usize>().ok()?;
+                    Some(Command::Square { x, y, size })
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        "rect" => {
+            // rect x1,y1 x2,y2
+            if parts.len() >= 3 {
+                let p1: Vec<&str> = parts[1].split(',').collect();
+                let p2: Vec<&str> = parts[2].split(',').collect();
+                if p1.len() == 2 && p2.len() == 2 {
+                    let x1 = p1[0].parse::<usize>().ok()?;
+                    let y1 = p1[1].parse::<usize>().ok()?;
+                    let x2 = p2[0].parse::<usize>().ok()?;
+                    let y2 = p2[1].parse::<usize>().ok()?;
+                    Some(Command::Rect { x1, y1, x2, y2 })
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        "circle" => {
+            // circle x,y r
+            if parts.len() >= 3 {
+                let coords: Vec<&str> = parts[1].split(',').collect();
+                if coords.len() == 2 {
+                    let x = coords[0].parse::<usize>().ok()?;
+                    let y = coords[1].parse::<usize>().ok()?;
+                    let r = parts[2].parse::<usize>().ok()?;
+                    Some(Command::Circle { x, y, r })
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        "oval" => {
+            // oval x,y rx,ry
+            if parts.len() >= 3 {
+                let coords: Vec<&str> = parts[1].split(',').collect();
+                let radii: Vec<&str> = parts[2].split(',').collect();
+                if coords.len() == 2 && radii.len() == 2 {
+                    let x = coords[0].parse::<usize>().ok()?;
+                    let y = coords[1].parse::<usize>().ok()?;
+                    let rx = radii[0].parse::<usize>().ok()?;
+                    let ry = radii[1].parse::<usize>().ok()?;
+                    Some(Command::Oval { x, y, rx, ry })
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        "triangle" => {
+            // triangle x1,y1 x2,y2
+            if parts.len() >= 3 {
+                let p1: Vec<&str> = parts[1].split(',').collect();
+                let p2: Vec<&str> = parts[2].split(',').collect();
+                if p1.len() == 2 && p2.len() == 2 {
+                    let x1 = p1[0].parse::<usize>().ok()?;
+                    let y1 = p1[1].parse::<usize>().ok()?;
+                    let x2 = p2[0].parse::<usize>().ok()?;
+                    let y2 = p2[1].parse::<usize>().ok()?;
+                    Some(Command::Triangle { x1, y1, x2, y2 })
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
         _ => None,
     }
 }
@@ -206,6 +345,97 @@ pub fn execute_command(
                 fill_str,
                 *brush_size
             ))
+        }
+        Command::Line { x1, y1, x2, y2 } => {
+            let edge_color = edge_color_index.map(|i| COLOR_PALETTE[i]);
+            let fill_color = fill_color_index.map(|i| COLOR_PALETTE[i]);
+            draw_shape_with_fill(
+                buffer,
+                ToolMode::Line,
+                *x1, *y1, *x2, *y2,
+                edge_color,
+                fill_color,
+                *brush_size,
+            );
+            None
+        }
+        Command::Square { x, y, size } => {
+            let edge_color = edge_color_index.map(|i| COLOR_PALETTE[i]);
+            let fill_color = fill_color_index.map(|i| COLOR_PALETTE[i]);
+            // Convert top-left + size to bounding box coordinates
+            let x2 = x + size;
+            let y2 = y + size;
+            draw_shape_with_fill(
+                buffer,
+                ToolMode::Square,
+                *x, *y, x2, y2,
+                edge_color,
+                fill_color,
+                *brush_size,
+            );
+            None
+        }
+        Command::Rect { x1, y1, x2, y2 } => {
+            let edge_color = edge_color_index.map(|i| COLOR_PALETTE[i]);
+            let fill_color = fill_color_index.map(|i| COLOR_PALETTE[i]);
+            draw_shape_with_fill(
+                buffer,
+                ToolMode::Rectangle,
+                *x1, *y1, *x2, *y2,
+                edge_color,
+                fill_color,
+                *brush_size,
+            );
+            None
+        }
+        Command::Circle { x, y, r } => {
+            let edge_color = edge_color_index.map(|i| COLOR_PALETTE[i]);
+            let fill_color = fill_color_index.map(|i| COLOR_PALETTE[i]);
+            // Convert center + radius to bounding box coordinates
+            let x1 = x.saturating_sub(*r);
+            let y1 = y.saturating_sub(*r);
+            let x2 = x + r;
+            let y2 = y + r;
+            draw_shape_with_fill(
+                buffer,
+                ToolMode::Circle,
+                x1, y1, x2, y2,
+                edge_color,
+                fill_color,
+                *brush_size,
+            );
+            None
+        }
+        Command::Oval { x, y, rx, ry } => {
+            let edge_color = edge_color_index.map(|i| COLOR_PALETTE[i]);
+            let fill_color = fill_color_index.map(|i| COLOR_PALETTE[i]);
+            // Convert center + radii to bounding box coordinates
+            let x1 = x.saturating_sub(*rx);
+            let y1 = y.saturating_sub(*ry);
+            let x2 = x + rx;
+            let y2 = y + ry;
+            draw_shape_with_fill(
+                buffer,
+                ToolMode::Oval,
+                x1, y1, x2, y2,
+                edge_color,
+                fill_color,
+                *brush_size,
+            );
+            None
+        }
+        Command::Triangle { x1, y1, x2, y2 } => {
+            let edge_color = edge_color_index.map(|i| COLOR_PALETTE[i]);
+            let fill_color = fill_color_index.map(|i| COLOR_PALETTE[i]);
+            draw_shape_with_fill(
+                buffer,
+                ToolMode::Triangle,
+                *x1, *y1, *x2, *y2,
+                edge_color,
+                fill_color,
+                *brush_size,
+            );
+            None
         }
     }
 }

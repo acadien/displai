@@ -97,6 +97,113 @@ fn test_parse_unknown_command() {
 }
 
 // ===================
+// Shape Command Parsing Tests
+// ===================
+
+#[test]
+fn test_parse_line() {
+    assert_eq!(
+        parse_command("line 100,200 300,400"),
+        Some(Command::Line {
+            x1: 100,
+            y1: 200,
+            x2: 300,
+            y2: 400
+        })
+    );
+
+    // Invalid formats
+    assert_eq!(parse_command("line 100,200"), None);
+    assert_eq!(parse_command("line"), None);
+    assert_eq!(parse_command("line abc,def 100,200"), None);
+}
+
+#[test]
+fn test_parse_square() {
+    assert_eq!(
+        parse_command("square 100,200 50"),
+        Some(Command::Square {
+            x: 100,
+            y: 200,
+            size: 50
+        })
+    );
+
+    // Invalid formats
+    assert_eq!(parse_command("square 100,200"), None);
+    assert_eq!(parse_command("square"), None);
+    assert_eq!(parse_command("square abc,def 50"), None);
+}
+
+#[test]
+fn test_parse_rect() {
+    assert_eq!(
+        parse_command("rect 100,200 300,400"),
+        Some(Command::Rect {
+            x1: 100,
+            y1: 200,
+            x2: 300,
+            y2: 400
+        })
+    );
+
+    // Invalid formats
+    assert_eq!(parse_command("rect 100,200"), None);
+    assert_eq!(parse_command("rect"), None);
+}
+
+#[test]
+fn test_parse_circle() {
+    assert_eq!(
+        parse_command("circle 200,300 50"),
+        Some(Command::Circle {
+            x: 200,
+            y: 300,
+            r: 50
+        })
+    );
+
+    // Invalid formats
+    assert_eq!(parse_command("circle 200,300"), None);
+    assert_eq!(parse_command("circle"), None);
+}
+
+#[test]
+fn test_parse_oval() {
+    assert_eq!(
+        parse_command("oval 200,300 50,30"),
+        Some(Command::Oval {
+            x: 200,
+            y: 300,
+            rx: 50,
+            ry: 30
+        })
+    );
+
+    // Invalid formats
+    assert_eq!(parse_command("oval 200,300"), None);
+    assert_eq!(parse_command("oval 200,300 50"), None);
+    assert_eq!(parse_command("oval"), None);
+}
+
+#[test]
+fn test_parse_triangle() {
+    assert_eq!(
+        parse_command("triangle 100,200 300,400"),
+        Some(Command::Triangle {
+            x1: 100,
+            y1: 200,
+            x2: 300,
+            y2: 400
+        })
+    );
+
+    // Invalid formats
+    assert_eq!(parse_command("triangle 100,200"), None);
+    assert_eq!(parse_command("triangle"), None);
+}
+
+// ===================
 // Command Execution Tests
 // ===================
 
@@ -339,6 +446,202 @@ fn test_execute_dot_with_transparent_edge_does_nothing() {
 
     // Pixel should be unchanged when edge is transparent
     assert_eq!(buffer[y * WIDTH + x], original);
+}
+
+// ===================
+// Shape Command Execution Tests
+// ===================
+
+#[test]
+fn test_execute_line_command() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(2); // Red
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1;
+
+    let y = CANVAS_TOP + 100;
+    execute_command(
+        &Command::Line {
+            x1: 100,
+            y1: y,
+            x2: 150,
+            y2: y,
+        },
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Verify pixels along the line are red
+    for x in 100..=150 {
+        assert_eq!(
+            buffer[y * WIDTH + x],
+            COLOR_PALETTE[2],
+            "Pixel at x={} should be red",
+            x
+        );
+    }
+}
+
+#[test]
+fn test_execute_rect_command() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0); // Black
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1;
+
+    let x1 = 100;
+    let y1 = CANVAS_TOP + 50;
+    let x2 = 200;
+    let y2 = CANVAS_TOP + 150;
+
+    execute_command(
+        &Command::Rect { x1, y1, x2, y2 },
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Verify top edge
+    assert_eq!(buffer[y1 * WIDTH + 150], BLACK, "Top edge should be black");
+    // Verify left edge
+    assert_eq!(buffer[(y1 + 50) * WIDTH + x1], BLACK, "Left edge should be black");
+    // Interior should still be white (no fill)
+    assert_eq!(buffer[(y1 + 50) * WIDTH + 150], WHITE, "Interior should be white");
+}
+
+#[test]
+fn test_execute_rect_with_fill() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0); // Black
+    let mut fill_color_index: Option<usize> = Some(2); // Red fill
+    let mut size = 1;
+
+    let x1 = 100;
+    let y1 = CANVAS_TOP + 50;
+    let x2 = 200;
+    let y2 = CANVAS_TOP + 150;
+
+    execute_command(
+        &Command::Rect { x1, y1, x2, y2 },
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Interior should be red (fill)
+    assert_eq!(
+        buffer[(y1 + 50) * WIDTH + 150],
+        COLOR_PALETTE[2],
+        "Interior should be red fill"
+    );
+}
+
+#[test]
+fn test_execute_square_command() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0); // Black
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1;
+
+    let x = 100;
+    let y = CANVAS_TOP + 50;
+    let sq_size = 50;
+
+    execute_command(
+        &Command::Square { x, y, size: sq_size },
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Verify corners are drawn
+    assert_eq!(buffer[y * WIDTH + x], BLACK, "Top-left corner");
+    assert_eq!(buffer[y * WIDTH + (x + sq_size)], BLACK, "Top-right corner");
+    assert_eq!(buffer[(y + sq_size) * WIDTH + x], BLACK, "Bottom-left corner");
+}
+
+#[test]
+fn test_execute_circle_command() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0); // Black
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1;
+
+    let cx = 200;
+    let cy = CANVAS_TOP + 100;
+    let r = 30;
+
+    execute_command(
+        &Command::Circle { x: cx, y: cy, r },
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Center should still be white (no fill)
+    assert_eq!(buffer[cy * WIDTH + cx], WHITE, "Center should be white");
+    // Top of circle should be black
+    assert_eq!(buffer[(cy - r) * WIDTH + cx], BLACK, "Top of circle should be black");
+}
+
+#[test]
+fn test_execute_oval_command() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0); // Black
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1;
+
+    let cx = 200;
+    let cy = CANVAS_TOP + 100;
+    let rx = 50;
+    let ry = 30;
+
+    execute_command(
+        &Command::Oval { x: cx, y: cy, rx, ry },
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Center should still be white (no fill)
+    assert_eq!(buffer[cy * WIDTH + cx], WHITE, "Center should be white");
+}
+
+#[test]
+fn test_execute_triangle_command() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0); // Black
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1;
+
+    let x1 = 100;
+    let y1 = CANVAS_TOP + 50;
+    let x2 = 200;
+    let y2 = CANVAS_TOP + 150;
+
+    execute_command(
+        &Command::Triangle { x1, y1, x2, y2 },
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Triangle with y1 < y2 points DOWN (apex at bottom, base at top)
+    // Base corners at top: (x1, y1) and (x2, y1)
+    assert_eq!(buffer[y1 * WIDTH + x1], BLACK, "Top-left base corner");
+    assert_eq!(buffer[y1 * WIDTH + x2], BLACK, "Top-right base corner");
+
+    // Apex at bottom center: ((x1+x2)/2, y2)
+    let apex_x = (x1 + x2) / 2;
+    assert_eq!(buffer[y2 * WIDTH + apex_x], BLACK, "Apex should be black");
 }
 
 // ===================
