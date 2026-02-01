@@ -84,7 +84,7 @@ fn test_close_button_is_red() {
 fn test_draw_bottom_toolbar_covers_bottom() {
     let mut buffer = new_buffer();
 
-    draw_bottom_toolbar(&mut buffer, 0, false, 1);
+    draw_bottom_toolbar(&mut buffer, 0, 1);
 
     // Bottom toolbar area should be filled
     let mid_x = WIDTH / 2;
@@ -94,14 +94,14 @@ fn test_draw_bottom_toolbar_covers_bottom() {
 }
 
 #[test]
-fn test_all_13_palette_colors_rendered() {
+fn test_all_14_palette_colors_rendered() {
     let mut buffer = new_buffer();
 
-    draw_bottom_toolbar(&mut buffer, 0, false, 1);
+    draw_bottom_toolbar(&mut buffer, 0, 1);
 
-    // Verify each of the 13 color buttons shows its corresponding color
+    // Verify each of the 14 color buttons shows its corresponding color
     let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
-    for i in 0..13 {
+    for i in 0..14 {
         let bx = BUTTON_MARGIN + i * (BUTTON_SIZE + BUTTON_MARGIN);
 
         // Check center of button (avoid border pixels)
@@ -121,7 +121,7 @@ fn test_selected_color_has_white_border() {
     let mut buffer = new_buffer();
 
     // Select color index 5
-    draw_bottom_toolbar(&mut buffer, 5, false, 1);
+    draw_bottom_toolbar(&mut buffer, 5, 1);
 
     let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
 
@@ -136,48 +136,28 @@ fn test_selected_color_has_white_border() {
 }
 
 #[test]
-fn test_eraser_active_deselects_colors() {
+fn test_white_color_selected_has_blue_border() {
     let mut buffer = new_buffer();
 
-    // Eraser active with color 5 selected
-    draw_bottom_toolbar(&mut buffer, 5, true, 1);
+    // Select white color (index 1)
+    draw_bottom_toolbar(&mut buffer, 1, 1);
 
     let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
 
-    // Button 5 should NOT have white border when eraser is active
-    let btn5_x = BUTTON_MARGIN + 5 * (BUTTON_SIZE + BUTTON_MARGIN);
-    let border_pixel_5 = buffer[row1_y * WIDTH + btn5_x];
-    assert_eq!(border_pixel_5, DARK_GRAY);
-
-    // Eraser button should have blue border
-    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let eraser_x = BUTTON_MARGIN;
-    let eraser_border = buffer[row2_y * WIDTH + eraser_x];
-    assert_eq!(eraser_border, 0x4040E0); // Blue
-}
-
-#[test]
-fn test_eraser_button_rendered() {
-    let mut buffer = new_buffer();
-
-    draw_bottom_toolbar(&mut buffer, 0, false, 1);
-
-    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let eraser_x = BUTTON_MARGIN;
-
-    // Eraser button background should be white (check corner to avoid E icon)
-    assert_eq!(buffer[(row2_y + 1) * WIDTH + (eraser_x + 1)], WHITE);
+    // Button 1 (white) should have blue border (to be visible on white)
+    let btn1_x = BUTTON_MARGIN + 1 * (BUTTON_SIZE + BUTTON_MARGIN);
+    let border_pixel_1 = buffer[row1_y * WIDTH + btn1_x];
+    assert_eq!(border_pixel_1, 0x4040E0); // Blue border for white color
 }
 
 #[test]
 fn test_plus_minus_buttons_rendered() {
     let mut buffer = new_buffer();
 
-    draw_bottom_toolbar(&mut buffer, 0, false, 5);
+    draw_bottom_toolbar(&mut buffer, 0, 5);
 
     let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let eraser_x = BUTTON_MARGIN;
-    let size_display_x = eraser_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
+    let size_display_x = BUTTON_MARGIN;
     let minus_x = size_display_x + 44 + BUTTON_MARGIN;
     let plus_x = minus_x + BUTTON_SIZE + BUTTON_MARGIN;
 
@@ -192,11 +172,10 @@ fn test_plus_minus_buttons_rendered() {
 fn test_size_display_rendered() {
     let mut buffer = new_buffer();
 
-    draw_bottom_toolbar(&mut buffer, 0, false, 10);
+    draw_bottom_toolbar(&mut buffer, 0, 10);
 
     let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let eraser_x = BUTTON_MARGIN;
-    let size_display_x = eraser_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
+    let size_display_x = BUTTON_MARGIN;
 
     // Size display should have white background (check near edge to avoid number)
     assert_eq!(buffer[(row2_y + 1) * WIDTH + (size_display_x + 1)], WHITE);
@@ -217,9 +196,10 @@ fn test_canvas_area_dimensions() {
 }
 
 #[test]
-fn test_color_palette_has_13_colors() {
-    assert_eq!(COLOR_PALETTE.len(), 13);
+fn test_color_palette_has_14_colors() {
+    assert_eq!(COLOR_PALETTE.len(), 14);
     assert_eq!(COLOR_PALETTE[0], BLACK); // First color should be black
+    assert_eq!(COLOR_PALETTE[1], WHITE); // Second color should be white (acts as eraser)
 }
 
 #[test]

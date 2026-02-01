@@ -29,23 +29,20 @@ fn test_parse_state() {
 fn test_parse_color() {
     assert_eq!(parse_command("color 0"), Some(Command::Color(0)));
     assert_eq!(parse_command("color 5"), Some(Command::Color(5)));
-    assert_eq!(parse_command("color 12"), Some(Command::Color(12)));
+    assert_eq!(parse_command("color 13"), Some(Command::Color(13)));
 
-    // Invalid color indices
-    assert_eq!(parse_command("color 13"), None);
+    // Invalid color indices (14 colors means indices 0-13)
+    assert_eq!(parse_command("color 14"), None);
     assert_eq!(parse_command("color -1"), None);
     assert_eq!(parse_command("color abc"), None);
     assert_eq!(parse_command("color"), None);
 }
 
 #[test]
-fn test_parse_eraser() {
-    assert_eq!(parse_command("eraser on"), Some(Command::Eraser(true)));
-    assert_eq!(parse_command("eraser off"), Some(Command::Eraser(false)));
-
-    // Invalid eraser values
-    assert_eq!(parse_command("eraser"), None);
-    assert_eq!(parse_command("eraser yes"), None);
+fn test_parse_eraser_no_longer_valid() {
+    // Eraser command has been removed - should return None
+    assert_eq!(parse_command("eraser on"), None);
+    assert_eq!(parse_command("eraser off"), None);
 }
 
 #[test]
@@ -107,60 +104,29 @@ fn test_parse_unknown_command() {
 fn test_execute_color_command() {
     let mut buffer = new_buffer();
     let mut color_index = 0;
-    let mut eraser = true;
     let mut size = 5;
 
     let result = execute_command(
         &Command::Color(5),
         &mut buffer,
         &mut color_index,
-        &mut eraser,
         &mut size,
     );
 
     assert_eq!(color_index, 5);
-    assert_eq!(eraser, false); // Should turn off eraser
     assert!(result.is_none());
-}
-
-#[test]
-fn test_execute_eraser_command() {
-    let mut buffer = new_buffer();
-    let mut color_index = 0;
-    let mut eraser = false;
-    let mut size = 5;
-
-    execute_command(
-        &Command::Eraser(true),
-        &mut buffer,
-        &mut color_index,
-        &mut eraser,
-        &mut size,
-    );
-    assert_eq!(eraser, true);
-
-    execute_command(
-        &Command::Eraser(false),
-        &mut buffer,
-        &mut color_index,
-        &mut eraser,
-        &mut size,
-    );
-    assert_eq!(eraser, false);
 }
 
 #[test]
 fn test_execute_size_command() {
     let mut buffer = new_buffer();
     let mut color_index = 0;
-    let mut eraser = false;
     let mut size = 5;
 
     execute_command(
         &Command::Size(15),
         &mut buffer,
         &mut color_index,
-        &mut eraser,
         &mut size,
     );
     assert_eq!(size, 15);
@@ -169,8 +135,7 @@ fn test_execute_size_command() {
 #[test]
 fn test_execute_dot_command() {
     let mut buffer = new_buffer();
-    let mut color_index = 0;
-    let mut eraser = false;
+    let mut color_index = 0; // Black
     let mut size = 1;
 
     // Draw a dot in the canvas area
@@ -180,7 +145,6 @@ fn test_execute_dot_command() {
         &Command::Dot { x, y },
         &mut buffer,
         &mut color_index,
-        &mut eraser,
         &mut size,
     );
 
@@ -189,31 +153,28 @@ fn test_execute_dot_command() {
 }
 
 #[test]
-fn test_execute_dot_with_eraser() {
+fn test_execute_dot_with_white_erases() {
     let mut buffer = new_buffer();
-    let mut color_index = 0;
-    let mut eraser = false;
+    let mut color_index = 0; // Black
     let mut size = 1;
 
-    // First draw a dot
+    // First draw a black dot
     let x = 100;
     let y = CANVAS_TOP + 50;
     execute_command(
         &Command::Dot { x, y },
         &mut buffer,
         &mut color_index,
-        &mut eraser,
         &mut size,
     );
-    assert_eq!(buffer[y * WIDTH + x], COLOR_PALETTE[0]);
+    assert_eq!(buffer[y * WIDTH + x], COLOR_PALETTE[0]); // Black
 
-    // Now erase it
-    eraser = true;
+    // Now use white (index 1) to erase it
+    color_index = 1; // White
     execute_command(
         &Command::Dot { x, y },
         &mut buffer,
         &mut color_index,
-        &mut eraser,
         &mut size,
     );
     assert_eq!(buffer[y * WIDTH + x], WHITE);
@@ -222,8 +183,7 @@ fn test_execute_dot_with_eraser() {
 #[test]
 fn test_execute_stroke_command() {
     let mut buffer = new_buffer();
-    let mut color_index = 1; // Red
-    let mut eraser = false;
+    let mut color_index = 2; // Red (index 2 after Black, White)
     let mut size = 1;
 
     let y = CANVAS_TOP + 100;
@@ -236,7 +196,6 @@ fn test_execute_stroke_command() {
         },
         &mut buffer,
         &mut color_index,
-        &mut eraser,
         &mut size,
     );
 
@@ -244,7 +203,7 @@ fn test_execute_stroke_command() {
     for x in 50..=60 {
         assert_eq!(
             buffer[y * WIDTH + x],
-            COLOR_PALETTE[1],
+            COLOR_PALETTE[2],
             "Pixel at x={} should be red",
             x
         );
@@ -255,7 +214,6 @@ fn test_execute_stroke_command() {
 fn test_execute_clear_command() {
     let mut buffer = new_buffer();
     let mut color_index = 0;
-    let mut eraser = false;
     let mut size = 5;
 
     // Draw something first
@@ -264,7 +222,6 @@ fn test_execute_clear_command() {
         &Command::Dot { x: 100, y },
         &mut buffer,
         &mut color_index,
-        &mut eraser,
         &mut size,
     );
     assert_ne!(buffer[y * WIDTH + 100], WHITE);
@@ -274,7 +231,6 @@ fn test_execute_clear_command() {
         &Command::Clear,
         &mut buffer,
         &mut color_index,
-        &mut eraser,
         &mut size,
     );
 
@@ -296,36 +252,16 @@ fn test_execute_clear_command() {
 fn test_execute_state_command() {
     let mut buffer = new_buffer();
     let mut color_index = 5;
-    let mut eraser = true;
     let mut size = 10;
 
     let result = execute_command(
         &Command::State,
         &mut buffer,
         &mut color_index,
-        &mut eraser,
         &mut size,
     );
 
-    assert_eq!(result, Some("color:5 eraser:on size:10".to_string()));
-}
-
-#[test]
-fn test_execute_state_command_eraser_off() {
-    let mut buffer = new_buffer();
-    let mut color_index = 3;
-    let mut eraser = false;
-    let mut size = 7;
-
-    let result = execute_command(
-        &Command::State,
-        &mut buffer,
-        &mut color_index,
-        &mut eraser,
-        &mut size,
-    );
-
-    assert_eq!(result, Some("color:3 eraser:off size:7".to_string()));
+    assert_eq!(result, Some("color:5 size:10".to_string()));
 }
 
 // ===================

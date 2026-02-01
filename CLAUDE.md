@@ -151,10 +151,10 @@ state                 -> returns "color:N eraser:on|off size:N"
 - ✅ PNG snapshot export
 
 ### Version 0.2 (Planned)
-- Undo/redo functionality
 - Shape tools (rectangle, circle, line)
 
 ### Version 0.3 (Planned)
+- Undo/redo functionality
 - Collaboration features (multi-user drawing)
 - Layer support
 

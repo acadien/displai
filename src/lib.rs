@@ -13,8 +13,9 @@ pub const DARK_GRAY: u32 = 0x808080;
 pub const RED: u32 = 0xE04040;
 pub const BLUE: u32 = 0x4040E0;
 
-pub const COLOR_PALETTE: [u32; 13] = [
+pub const COLOR_PALETTE: [u32; 14] = [
     0x000000, // Black (default)
+    0xFFFFFF, // White (acts as eraser)
     0xE04040, // Red
     0xE07040, // Red-Orange
     0xE0A040, // Orange
@@ -47,7 +48,6 @@ pub const DEFAULT_BRUSH_SIZE: usize = 1;
 pub enum Command {
     Snapshot,
     Color(usize),
-    Eraser(bool),
     Size(usize),
     Stroke {
         x1: usize,
@@ -83,17 +83,6 @@ pub fn parse_command(input: &str) -> Option<Command> {
                     .ok()
                     .filter(|&i| i < COLOR_PALETTE.len())
                     .map(Command::Color)
-            } else {
-                None
-            }
-        }
-        "eraser" => {
-            if parts.len() >= 2 {
-                match parts[1] {
-                    "on" => Some(Command::Eraser(true)),
-                    "off" => Some(Command::Eraser(false)),
-                    _ => None,
-                }
             } else {
                 None
             }
@@ -152,7 +141,6 @@ pub fn execute_command(
     cmd: &Command,
     buffer: &mut [u32],
     selected_color_index: &mut usize,
-    eraser_active: &mut bool,
     brush_size: &mut usize,
 ) -> Option<String> {
     match cmd {
@@ -165,11 +153,6 @@ pub fn execute_command(
         }
         Command::Color(index) => {
             *selected_color_index = *index;
-            *eraser_active = false;
-            None
-        }
-        Command::Eraser(on) => {
-            *eraser_active = *on;
             None
         }
         Command::Size(size) => {
@@ -177,20 +160,12 @@ pub fn execute_command(
             None
         }
         Command::Stroke { x1, y1, x2, y2 } => {
-            let color = if *eraser_active {
-                WHITE
-            } else {
-                COLOR_PALETTE[*selected_color_index]
-            };
+            let color = COLOR_PALETTE[*selected_color_index];
             draw_brush_line(buffer, *x1, *y1, *x2, *y2, color, *brush_size);
             None
         }
         Command::Dot { x, y } => {
-            let color = if *eraser_active {
-                WHITE
-            } else {
-                COLOR_PALETTE[*selected_color_index]
-            };
+            let color = COLOR_PALETTE[*selected_color_index];
             draw_circle(buffer, *x, *y, *brush_size, color);
             None
         }
@@ -199,9 +174,8 @@ pub fn execute_command(
             None
         }
         Command::State => Some(format!(
-            "color:{} eraser:{} size:{}",
+            "color:{} size:{}",
             *selected_color_index,
-            if *eraser_active { "on" } else { "off" },
             *brush_size
         )),
     }
@@ -313,7 +287,6 @@ pub fn run() {
     let mut last_pos: Option<(usize, usize)> = None;
     let mut mouse_was_down = false;
     let mut selected_color_index: usize = 0;
-    let mut eraser_active: bool = false;
     let mut brush_size: usize = DEFAULT_BRUSH_SIZE;
 
     // Start stdin reader thread for command protocol
@@ -331,7 +304,6 @@ pub fn run() {
                             &cmd,
                             &mut buffer,
                             &mut selected_color_index,
-                            &mut eraser_active,
                             &mut brush_size,
                         ) {
                             println!("{}", response);
@@ -354,7 +326,6 @@ pub fn run() {
                             &cmd,
                             &mut buffer,
                             &mut selected_color_index,
-                            &mut eraser_active,
                             &mut brush_size,
                         );
                         if let Some(resp) = response {
@@ -371,7 +342,7 @@ pub fn run() {
             }
         }
         draw_title_bar(&mut buffer);
-        draw_bottom_toolbar(&mut buffer, selected_color_index, eraser_active, brush_size);
+        draw_bottom_toolbar(&mut buffer, selected_color_index, brush_size);
 
         let mouse_down = window.get_mouse_down(MouseButton::Left);
         let mouse_clicked = mouse_down && !mouse_was_down;
@@ -386,10 +357,6 @@ pub fn run() {
                 }
                 if let Some(color_index) = get_clicked_color_index_bottom(x, y) {
                     selected_color_index = color_index;
-                    eraser_active = false;
-                }
-                if is_in_eraser_button(x, y) {
-                    eraser_active = true;
                 }
                 if is_in_minus_button(x, y) && brush_size > MIN_BRUSH_SIZE {
                     brush_size -= 1;
@@ -399,11 +366,7 @@ pub fn run() {
                 }
             }
 
-            let pen_color = if eraser_active {
-                WHITE
-            } else {
-                COLOR_PALETTE[selected_color_index]
-            };
+            let pen_color = COLOR_PALETTE[selected_color_index];
 
             if mouse_down && x < WIDTH && (CANVAS_TOP..CANVAS_BOTTOM).contains(&y) {
                 if is_drawing {
@@ -560,7 +523,6 @@ pub fn draw_line(buffer: &mut [u32], x0: usize, y0: usize, x1: usize, y1: usize,
 pub fn draw_bottom_toolbar(
     buffer: &mut [u32],
     selected_color_index: usize,
-    eraser_active: bool,
     brush_size: usize,
 ) {
     let toolbar_top = CANVAS_BOTTOM;
@@ -577,35 +539,26 @@ pub fn draw_bottom_toolbar(
         buffer[toolbar_top * WIDTH + x] = DARK_GRAY;
     }
 
-    // Row 1: 13 color buttons
+    // Row 1: 14 color buttons (Black, White, then colors)
     let row1_y = toolbar_top + BUTTON_MARGIN;
     for (i, &color) in COLOR_PALETTE.iter().enumerate() {
         let bx = BUTTON_MARGIN + i * (BUTTON_SIZE + BUTTON_MARGIN);
         draw_button(buffer, bx, row1_y, color);
 
-        // Draw border to indicate selection
-        if !eraser_active && i == selected_color_index {
-            draw_button_border(buffer, bx, row1_y, WHITE);
+        // Draw border to indicate selection (use blue for white button to be visible)
+        if i == selected_color_index {
+            let border_color = if color == WHITE { 0x4040E0 } else { WHITE };
+            draw_button_border(buffer, bx, row1_y, border_color);
         } else {
             draw_button_border(buffer, bx, row1_y, DARK_GRAY);
         }
     }
 
-    // Row 2: Eraser button + size display + [-] [+] buttons
+    // Row 2: Size display + [-] [+] buttons
     let row2_y = toolbar_top + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
 
-    // Eraser button
-    let eraser_x = BUTTON_MARGIN;
-    draw_button(buffer, eraser_x, row2_y, WHITE);
-    draw_eraser_icon(buffer, eraser_x, row2_y);
-    if eraser_active {
-        draw_button_border(buffer, eraser_x, row2_y, 0x4040E0); // Blue border when active
-    } else {
-        draw_button_border(buffer, eraser_x, row2_y, DARK_GRAY);
-    }
-
     // Size display (text showing current brush size)
-    let size_display_x = eraser_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
+    let size_display_x = BUTTON_MARGIN;
     draw_size_display(buffer, size_display_x, row2_y, brush_size);
 
     // Minus button
@@ -617,41 +570,6 @@ pub fn draw_bottom_toolbar(
     let plus_x = minus_x + BUTTON_SIZE + BUTTON_MARGIN;
     draw_button(buffer, plus_x, row2_y, DARK_GRAY);
     draw_plus_icon(buffer, plus_x, row2_y);
-}
-
-pub fn draw_eraser_icon(buffer: &mut [u32], bx: usize, by: usize) {
-    // Draw a simple "E" icon for eraser
-    let padding = 6;
-    let start_x = bx + padding;
-    let end_x = bx + BUTTON_SIZE - padding;
-    let start_y = by + padding;
-    let mid_y = by + BUTTON_SIZE / 2;
-    let end_y = by + BUTTON_SIZE - padding;
-
-    // Top horizontal line
-    for x in start_x..end_x {
-        if x < WIDTH && start_y < HEIGHT {
-            buffer[start_y * WIDTH + x] = BLACK;
-        }
-    }
-    // Middle horizontal line
-    for x in start_x..end_x {
-        if x < WIDTH && mid_y < HEIGHT {
-            buffer[mid_y * WIDTH + x] = BLACK;
-        }
-    }
-    // Bottom horizontal line
-    for x in start_x..end_x {
-        if x < WIDTH && end_y < HEIGHT {
-            buffer[end_y * WIDTH + x] = BLACK;
-        }
-    }
-    // Vertical line
-    for y in start_y..=end_y {
-        if start_x < WIDTH && y < HEIGHT {
-            buffer[y * WIDTH + start_x] = BLACK;
-        }
-    }
 }
 
 pub fn draw_minus_icon(buffer: &mut [u32], bx: usize, by: usize) {
@@ -834,7 +752,7 @@ pub fn get_clicked_color_index_bottom(x: usize, y: usize) -> Option<usize> {
     if y < row1_y || y >= row1_y + BUTTON_SIZE {
         return None;
     }
-    for i in 0..13 {
+    for i in 0..COLOR_PALETTE.len() {
         let bx = BUTTON_MARGIN + i * (BUTTON_SIZE + BUTTON_MARGIN);
         if x >= bx && x < bx + BUTTON_SIZE {
             return Some(i);
@@ -843,24 +761,16 @@ pub fn get_clicked_color_index_bottom(x: usize, y: usize) -> Option<usize> {
     None
 }
 
-pub fn is_in_eraser_button(x: usize, y: usize) -> bool {
-    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let eraser_x = BUTTON_MARGIN;
-    x >= eraser_x && x < eraser_x + BUTTON_SIZE && y >= row2_y && y < row2_y + BUTTON_SIZE
-}
-
 pub fn is_in_minus_button(x: usize, y: usize) -> bool {
     let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let eraser_x = BUTTON_MARGIN;
-    let size_display_x = eraser_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
+    let size_display_x = BUTTON_MARGIN;
     let minus_x = size_display_x + 44 + BUTTON_MARGIN;
     x >= minus_x && x < minus_x + BUTTON_SIZE && y >= row2_y && y < row2_y + BUTTON_SIZE
 }
 
 pub fn is_in_plus_button(x: usize, y: usize) -> bool {
     let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let eraser_x = BUTTON_MARGIN;
-    let size_display_x = eraser_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
+    let size_display_x = BUTTON_MARGIN;
     let minus_x = size_display_x + 44 + BUTTON_MARGIN;
     let plus_x = minus_x + BUTTON_SIZE + BUTTON_MARGIN;
     x >= plus_x && x < plus_x + BUTTON_SIZE && y >= row2_y && y < row2_y + BUTTON_SIZE
