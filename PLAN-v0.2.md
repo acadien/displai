@@ -123,29 +123,6 @@ Add shape drawing tools via both GUI (toolbar buttons) and socket commands. Repl
 
 ---
 
-## Phase 5: Polygon Support
-
-### 5.1 Polygon Drawing Function
-- Add `draw_polygon(buffer, points: &[(usize, usize)], color, brush_size)`
-- Connect points in order, close polygon (last point to first)
-- Minimum 3 points required
-
-### 5.2 Polygon GUI Tool
-- Add polygon tool button
-- Click to add vertices, double-click or close to finish
-- Track `polygon_points: Vec<(usize, usize)>` state
-
-### 5.3 Polygon Socket Command
-- `polygon x1,y1 x2,y2 x3,y3 ...` - draw polygon with N vertices
-- Minimum 3 points required
-
-### 5.4 Update Tests
-- Test polygon drawing with various vertex counts
-- Test polygon closing behavior
-- Test command parsing with multiple points
-
----
-
 ## Phase 6: Edge and Fill Colors (Future)
 
 ### 6.1 Dual Color State
@@ -177,6 +154,14 @@ Add shape drawing tools via both GUI (toolbar buttons) and socket commands. Repl
 
 ---
 
+## Phase 5: Hodge Podge
+
+### 5.1: Change the red X button for clearing the canvas to a big C
+### 5.2: Make the brush button more clearly a brush, it looks just like a short line now, maybe change it to a pen or pencil?
+### 5.3: Update the claude.md and the readme.md to reflect the current state of the project
+
+---
+
 ## Implementation Order
 
 1. **Phase 1** - Color palette refactor (removes eraser complexity) ✅ COMPLETE
@@ -184,7 +169,7 @@ Add shape drawing tools via both GUI (toolbar buttons) and socket commands. Repl
 3. **Phase 3** - Basic shapes (line, square, rect, circle, oval, triangle) ✅ COMPLETE
 4. **Phase 6** - Edge/fill colors ✅ COMPLETE
 5. **Phase 4** - Socket commands for shapes ✅ COMPLETE
-6. **Phase 5** - Polygon support
+6. **Phase 5** - Random fixes
 
 ---
 

@@ -60,7 +60,9 @@ pub enum ToolMode {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Snapshot,
-    Color(usize),
+    Color(usize),         // Legacy: sets edge color
+    Edge(Option<usize>),  // Set edge color (None = transparent)
+    Fill(Option<usize>),  // Set fill color (None = transparent)
     Size(usize),
     Stroke {
         x1: usize,
@@ -131,6 +133,36 @@ pub fn parse_command(input: &str) -> Option<Command> {
                     .ok()
                     .filter(|&i| i < COLOR_PALETTE.len())
                     .map(Command::Color)
+            } else {
+                None
+            }
+        }
+        "edge" => {
+            if parts.len() >= 2 {
+                if parts[1] == "none" {
+                    Some(Command::Edge(None))
+                } else {
+                    parts[1]
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|&i| i < COLOR_PALETTE.len())
+                        .map(|i| Command::Edge(Some(i)))
+                }
+            } else {
+                None
+            }
+        }
+        "fill" => {
+            if parts.len() >= 2 {
+                if parts[1] == "none" {
+                    Some(Command::Fill(None))
+                } else {
+                    parts[1]
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|&i| i < COLOR_PALETTE.len())
+                        .map(|i| Command::Fill(Some(i)))
+                }
             } else {
                 None
             }
@@ -306,6 +338,14 @@ pub fn execute_command(
         }
         Command::Color(index) => {
             *edge_color_index = Some(*index);
+            None
+        }
+        Command::Edge(color_opt) => {
+            *edge_color_index = *color_opt;
+            None
+        }
+        Command::Fill(color_opt) => {
+            *fill_color_index = *color_opt;
             None
         }
         Command::Size(size) => {

@@ -96,6 +96,32 @@ fn test_parse_unknown_command() {
     assert_eq!(parse_command("   "), None);
 }
 
+#[test]
+fn test_parse_edge() {
+    assert_eq!(parse_command("edge 0"), Some(Command::Edge(Some(0))));
+    assert_eq!(parse_command("edge 5"), Some(Command::Edge(Some(5))));
+    assert_eq!(parse_command("edge 13"), Some(Command::Edge(Some(13))));
+    assert_eq!(parse_command("edge none"), Some(Command::Edge(None)));
+
+    // Invalid
+    assert_eq!(parse_command("edge 14"), None);
+    assert_eq!(parse_command("edge"), None);
+    assert_eq!(parse_command("edge abc"), None);
+}
+
+#[test]
+fn test_parse_fill() {
+    assert_eq!(parse_command("fill 0"), Some(Command::Fill(Some(0))));
+    assert_eq!(parse_command("fill 5"), Some(Command::Fill(Some(5))));
+    assert_eq!(parse_command("fill 13"), Some(Command::Fill(Some(13))));
+    assert_eq!(parse_command("fill none"), Some(Command::Fill(None)));
+
+    // Invalid
+    assert_eq!(parse_command("fill 14"), None);
+    assert_eq!(parse_command("fill"), None);
+    assert_eq!(parse_command("fill abc"), None);
+}
+
 // ===================
 // Shape Command Parsing Tests
 // ===================
@@ -224,6 +250,62 @@ fn test_execute_color_command() {
 
     assert_eq!(edge_color_index, Some(5));
     assert!(result.is_none());
+}
+
+#[test]
+fn test_execute_edge_command() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0);
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 5;
+
+    // Set edge to color 7
+    execute_command(
+        &Command::Edge(Some(7)),
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+    assert_eq!(edge_color_index, Some(7));
+
+    // Set edge to transparent
+    execute_command(
+        &Command::Edge(None),
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+    assert_eq!(edge_color_index, None);
+}
+
+#[test]
+fn test_execute_fill_command() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0);
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 5;
+
+    // Set fill to color 3
+    execute_command(
+        &Command::Fill(Some(3)),
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+    assert_eq!(fill_color_index, Some(3));
+
+    // Set fill to transparent
+    execute_command(
+        &Command::Fill(None),
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+    assert_eq!(fill_color_index, None);
 }
 
 #[test]

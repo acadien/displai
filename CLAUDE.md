@@ -133,11 +133,13 @@ Control via Unix socket (`/tmp/displai.sock`) or stdin:
 ```
 snapshot              -> saves canvas.png, returns "saved canvas.png"
 color <0-13>          -> select edge color from palette (0=Black, 1=White acts as eraser)
+edge <0-13|none>      -> set edge color (none = transparent)
+fill <0-13|none>      -> set fill color (none = transparent/no fill)
 size <1-20>           -> set brush size
 stroke x1,y1 x2,y2    -> draw brush stroke between points
 dot x,y               -> draw single dot at position
 clear                 -> clear canvas to white
-state                 -> returns "edge:N fill:N|none size:N"
+state                 -> returns "edge:N|none fill:N|none size:N"
 
 # Shape commands (use current edge/fill colors and brush size)
 line x1,y1 x2,y2      -> draw line between two points
