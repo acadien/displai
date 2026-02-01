@@ -9,6 +9,7 @@ cargo build              # Debug build
 cargo build --release    # Release build
 cargo run                # Build and run
 cargo run --release      # Build and run with optimizations
+cargo check              # Quick compilation check (no binary output)
 cargo fmt                # Format code
 cargo clippy             # Lint
 cargo test               # Run all tests
@@ -26,6 +27,7 @@ tests/
   drawing_tests.rs  # Pixel and line drawing tests
   button_tests.rs   # Button hit detection tests
   ui_tests.rs       # Title bar and UI rendering tests
+  command_tests.rs  # Command parsing and execution tests
 ```
 
 ## Testing
@@ -64,6 +66,7 @@ fn test_example() {
 - `drawing_tests.rs` - Tests for `set_pixel`, `draw_line`, boundary conditions
 - `button_tests.rs` - Tests for `is_in_close_button`, `is_in_color_button`
 - `ui_tests.rs` - Tests for `draw_title_bar`, `draw_button`, rendering
+- `command_tests.rs` - Tests for `parse_command`, `execute_command`, PNG export
 
 ### Test Requirements
 
@@ -90,7 +93,8 @@ Before any code changes can be committed:
 
 - `src/lib.rs` - Core logic, all public functions and constants
 - `src/main.rs` - Entry point, calls `displai::run()`
-- 800x600 pixel canvas with custom title bar (30px height)
+- 800x600 window with custom title bar (30px) and bottom toolbar (60px)
+- Drawable canvas area: 800x510 pixels (from y=30 to y=540)
 - Direct pixel buffer manipulation using a `Vec<u32>` (linear array, index = `y * WIDTH + x`)
 - RGB pixel format: `0xRRGGBB`
 - Bresenham's line algorithm for continuous drawing
