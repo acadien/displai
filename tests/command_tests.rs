@@ -103,30 +103,34 @@ fn test_parse_unknown_command() {
 #[test]
 fn test_execute_color_command() {
     let mut buffer = new_buffer();
-    let mut color_index = 0;
+    let mut edge_color_index: Option<usize> = Some(0);
+    let mut fill_color_index: Option<usize> = None;
     let mut size = 5;
 
     let result = execute_command(
         &Command::Color(5),
         &mut buffer,
-        &mut color_index,
+        &mut edge_color_index,
+        &mut fill_color_index,
         &mut size,
     );
 
-    assert_eq!(color_index, 5);
+    assert_eq!(edge_color_index, Some(5));
     assert!(result.is_none());
 }
 
 #[test]
 fn test_execute_size_command() {
     let mut buffer = new_buffer();
-    let mut color_index = 0;
+    let mut edge_color_index: Option<usize> = Some(0);
+    let mut fill_color_index: Option<usize> = None;
     let mut size = 5;
 
     execute_command(
         &Command::Size(15),
         &mut buffer,
-        &mut color_index,
+        &mut edge_color_index,
+        &mut fill_color_index,
         &mut size,
     );
     assert_eq!(size, 15);
@@ -135,7 +139,8 @@ fn test_execute_size_command() {
 #[test]
 fn test_execute_dot_command() {
     let mut buffer = new_buffer();
-    let mut color_index = 0; // Black
+    let mut edge_color_index: Option<usize> = Some(0); // Black
+    let mut fill_color_index: Option<usize> = None;
     let mut size = 1;
 
     // Draw a dot in the canvas area
@@ -144,7 +149,8 @@ fn test_execute_dot_command() {
     execute_command(
         &Command::Dot { x, y },
         &mut buffer,
-        &mut color_index,
+        &mut edge_color_index,
+        &mut fill_color_index,
         &mut size,
     );
 
@@ -155,7 +161,8 @@ fn test_execute_dot_command() {
 #[test]
 fn test_execute_dot_with_white_erases() {
     let mut buffer = new_buffer();
-    let mut color_index = 0; // Black
+    let mut edge_color_index: Option<usize> = Some(0); // Black
+    let mut fill_color_index: Option<usize> = None;
     let mut size = 1;
 
     // First draw a black dot
@@ -164,17 +171,19 @@ fn test_execute_dot_with_white_erases() {
     execute_command(
         &Command::Dot { x, y },
         &mut buffer,
-        &mut color_index,
+        &mut edge_color_index,
+        &mut fill_color_index,
         &mut size,
     );
     assert_eq!(buffer[y * WIDTH + x], COLOR_PALETTE[0]); // Black
 
     // Now use white (index 1) to erase it
-    color_index = 1; // White
+    edge_color_index = Some(1); // White
     execute_command(
         &Command::Dot { x, y },
         &mut buffer,
-        &mut color_index,
+        &mut edge_color_index,
+        &mut fill_color_index,
         &mut size,
     );
     assert_eq!(buffer[y * WIDTH + x], WHITE);
@@ -183,7 +192,8 @@ fn test_execute_dot_with_white_erases() {
 #[test]
 fn test_execute_stroke_command() {
     let mut buffer = new_buffer();
-    let mut color_index = 2; // Red (index 2 after Black, White)
+    let mut edge_color_index: Option<usize> = Some(2); // Red (index 2 after Black, White)
+    let mut fill_color_index: Option<usize> = None;
     let mut size = 1;
 
     let y = CANVAS_TOP + 100;
@@ -195,7 +205,8 @@ fn test_execute_stroke_command() {
             y2: y,
         },
         &mut buffer,
-        &mut color_index,
+        &mut edge_color_index,
+        &mut fill_color_index,
         &mut size,
     );
 
@@ -213,7 +224,8 @@ fn test_execute_stroke_command() {
 #[test]
 fn test_execute_clear_command() {
     let mut buffer = new_buffer();
-    let mut color_index = 0;
+    let mut edge_color_index: Option<usize> = Some(0);
+    let mut fill_color_index: Option<usize> = None;
     let mut size = 5;
 
     // Draw something first
@@ -221,7 +233,8 @@ fn test_execute_clear_command() {
     execute_command(
         &Command::Dot { x: 100, y },
         &mut buffer,
-        &mut color_index,
+        &mut edge_color_index,
+        &mut fill_color_index,
         &mut size,
     );
     assert_ne!(buffer[y * WIDTH + 100], WHITE);
@@ -230,7 +243,8 @@ fn test_execute_clear_command() {
     execute_command(
         &Command::Clear,
         &mut buffer,
-        &mut color_index,
+        &mut edge_color_index,
+        &mut fill_color_index,
         &mut size,
     );
 
@@ -251,17 +265,80 @@ fn test_execute_clear_command() {
 #[test]
 fn test_execute_state_command() {
     let mut buffer = new_buffer();
-    let mut color_index = 5;
+    let mut edge_color_index: Option<usize> = Some(5);
+    let mut fill_color_index: Option<usize> = Some(3);
     let mut size = 10;
 
     let result = execute_command(
         &Command::State,
         &mut buffer,
-        &mut color_index,
+        &mut edge_color_index,
+        &mut fill_color_index,
         &mut size,
     );
 
-    assert_eq!(result, Some("color:5 size:10".to_string()));
+    assert_eq!(result, Some("edge:5 fill:3 size:10".to_string()));
+}
+
+#[test]
+fn test_execute_state_command_no_fill() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(5);
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 10;
+
+    let result = execute_command(
+        &Command::State,
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    assert_eq!(result, Some("edge:5 fill:none size:10".to_string()));
+}
+
+#[test]
+fn test_execute_state_command_transparent_edge() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = None; // Transparent edge
+    let mut fill_color_index: Option<usize> = Some(3);
+    let mut size = 10;
+
+    let result = execute_command(
+        &Command::State,
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    assert_eq!(result, Some("edge:none fill:3 size:10".to_string()));
+}
+
+#[test]
+fn test_execute_dot_with_transparent_edge_does_nothing() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = None; // Transparent edge
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1;
+
+    let x = 100;
+    let y = CANVAS_TOP + 50;
+
+    // Store original pixel value
+    let original = buffer[y * WIDTH + x];
+
+    execute_command(
+        &Command::Dot { x, y },
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Pixel should be unchanged when edge is transparent
+    assert_eq!(buffer[y * WIDTH + x], original);
 }
 
 // ===================

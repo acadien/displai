@@ -179,12 +179,12 @@ Add shape drawing tools via both GUI (toolbar buttons) and socket commands. Repl
 
 ## Implementation Order
 
-1. **Phase 1** - Color palette refactor (removes eraser complexity)
-2. **Phase 2** - Shape tool infrastructure (buttons, tool modes)
-3. **Phase 3** - Basic shapes (line, square, rect, circle, oval, triangle)
-4. **Phase 4** - Socket commands for shapes
-5. **Phase 5** - Polygon support
-6. **Phase 6** - Edge/fill colors (can be deferred to v0.2.1 or v0.3)
+1. **Phase 1** - Color palette refactor (removes eraser complexity) ✅ COMPLETE
+2. **Phase 2** - Shape tool infrastructure (buttons, tool modes) ✅ COMPLETE
+3. **Phase 3** - Basic shapes (line, square, rect, circle, oval, triangle) ✅ COMPLETE
+4. **Phase 6** - Edge/fill colors ✅ COMPLETE
+5. **Phase 4** - Socket commands for shapes
+6. **Phase 5** - Polygon support
 
 ---
 

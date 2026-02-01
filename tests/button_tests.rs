@@ -276,3 +276,73 @@ fn test_row2_buttons_do_not_overlap() {
         }
     }
 }
+
+#[test]
+fn test_clear_button_detection() {
+    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
+    let size_display_x = BUTTON_MARGIN + 7 * (BUTTON_SIZE + BUTTON_MARGIN) + BUTTON_MARGIN;
+    let minus_x = size_display_x + 44 + BUTTON_MARGIN;
+    let plus_x = minus_x + BUTTON_SIZE + BUTTON_MARGIN;
+    let clear_x = plus_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
+
+    // Center of clear button
+    assert!(is_in_clear_button(
+        clear_x + BUTTON_SIZE / 2,
+        row2_y + BUTTON_SIZE / 2
+    ));
+
+    // Corners
+    assert!(is_in_clear_button(clear_x, row2_y));
+    assert!(is_in_clear_button(
+        clear_x + BUTTON_SIZE - 1,
+        row2_y + BUTTON_SIZE - 1
+    ));
+
+    // Just outside
+    assert!(!is_in_clear_button(clear_x - 1, row2_y));
+    assert!(!is_in_clear_button(clear_x, row2_y - 1));
+}
+
+#[test]
+fn test_transparent_button_detection() {
+    let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
+    let transparent_x = BUTTON_MARGIN + 14 * (BUTTON_SIZE + BUTTON_MARGIN);
+
+    // Center of transparent button
+    assert!(is_in_transparent_button(
+        transparent_x + BUTTON_SIZE / 2,
+        row1_y + BUTTON_SIZE / 2
+    ));
+
+    // Corners
+    assert!(is_in_transparent_button(transparent_x, row1_y));
+    assert!(is_in_transparent_button(
+        transparent_x + BUTTON_SIZE - 1,
+        row1_y + BUTTON_SIZE - 1
+    ));
+
+    // Just outside
+    assert!(!is_in_transparent_button(transparent_x - 1, row1_y));
+    assert!(!is_in_transparent_button(transparent_x, row1_y - 1));
+    assert!(!is_in_transparent_button(transparent_x, row1_y + BUTTON_SIZE));
+}
+
+#[test]
+fn test_transparent_button_does_not_overlap_colors() {
+    let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
+
+    // Transparent button is after all 14 color buttons
+    let transparent_x = BUTTON_MARGIN + 14 * (BUTTON_SIZE + BUTTON_MARGIN);
+
+    // Verify no color button is detected in transparent button area
+    for y in row1_y..row1_y + BUTTON_SIZE {
+        for x in transparent_x..transparent_x + BUTTON_SIZE {
+            assert!(
+                get_clicked_color_index_bottom(x, y).is_none(),
+                "Transparent button pixel ({}, {}) overlaps with color buttons",
+                x,
+                y
+            );
+        }
+    }
+}

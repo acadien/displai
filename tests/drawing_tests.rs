@@ -447,18 +447,21 @@ fn test_draw_shape_square() {
     let x1 = 100;
     let y1 = CANVAS_TOP + 100;
     let x2 = 200;
-    let y2 = CANVAS_TOP + 150;  // Drag defines a rectangle, but we draw a square
+    let y2 = CANVAS_TOP + 150;  // Drag defines a 100x50 rectangle
 
     draw_shape_square(&mut buffer, x1, y1, x2, y2, BLACK, 1);
 
-    // The side length should be max(dx, dy) = max(100, 50) = 100
-    // So we get a 100x100 square starting at (100, CANVAS_TOP+100)
+    // The side length should be min(width, height) = min(100, 50) = 50
+    // So we get a 50x50 square starting at (100, CANVAS_TOP+100)
 
     // Check all four corners are black
     assert_eq!(buffer[y1 * WIDTH + x1], BLACK, "Top-left corner");
-    assert_eq!(buffer[y1 * WIDTH + (x1 + 100)], BLACK, "Top-right corner");
-    assert_eq!(buffer[(y1 + 100) * WIDTH + x1], BLACK, "Bottom-left corner");
-    assert_eq!(buffer[(y1 + 100) * WIDTH + (x1 + 100)], BLACK, "Bottom-right corner");
+    assert_eq!(buffer[y1 * WIDTH + (x1 + 50)], BLACK, "Top-right corner");
+    assert_eq!(buffer[(y1 + 50) * WIDTH + x1], BLACK, "Bottom-left corner");
+    assert_eq!(buffer[(y1 + 50) * WIDTH + (x1 + 50)], BLACK, "Bottom-right corner");
+
+    // Point beyond square (at old 100x100 corner) should be white
+    assert_eq!(buffer[(y1 + 100) * WIDTH + (x1 + 100)], WHITE, "Beyond square should be white");
 }
 
 #[test]
@@ -631,6 +634,123 @@ fn test_draw_shape_dispatcher() {
     draw_shape(&mut buffer, ToolMode::Triangle, 100, y, 200, y + 100, BLACK, 1);
     // Apex at bottom center when dragging down
     assert_eq!(buffer[(y + 100) * WIDTH + 150], BLACK, "Triangle via dispatcher");
+}
+
+#[test]
+fn test_fill_rectangle() {
+    let mut buffer = new_buffer();
+    let x1 = 100;
+    let y1 = CANVAS_TOP + 50;
+    let x2 = 150;
+    let y2 = CANVAS_TOP + 100;
+
+    fill_rectangle(&mut buffer, x1, y1, x2, y2, RED);
+
+    // Interior should be filled
+    assert_eq!(buffer[(y1 + 25) * WIDTH + (x1 + 25)], RED, "Interior should be filled");
+
+    // Corners should be filled
+    assert_eq!(buffer[y1 * WIDTH + x1], RED, "Top-left corner");
+    assert_eq!(buffer[y2 * WIDTH + x2], RED, "Bottom-right corner");
+
+    // Just outside should be white
+    assert_eq!(buffer[(y1 - 1) * WIDTH + x1], WHITE, "Above should be white");
+    assert_eq!(buffer[y1 * WIDTH + (x2 + 1)], WHITE, "Right should be white");
+}
+
+#[test]
+fn test_fill_circle() {
+    let mut buffer = new_buffer();
+    // Circle bounded by 300,200 to 400,300 (100x100 box, radius 50)
+    fill_circle(&mut buffer, 300, 200, 400, 300, RED);
+
+    let cx = 350;
+    let cy = 250;
+
+    // Center should be filled
+    assert_eq!(buffer[cy * WIDTH + cx], RED, "Center should be filled");
+
+    // Points just inside radius should be filled
+    assert_eq!(buffer[cy * WIDTH + (cx + 40)], RED, "Near right edge");
+    assert_eq!(buffer[(cy + 40) * WIDTH + cx], RED, "Near bottom edge");
+
+    // Points outside radius should be white
+    assert_eq!(buffer[cy * WIDTH + (cx + 60)], WHITE, "Outside right");
+}
+
+#[test]
+fn test_fill_triangle() {
+    let mut buffer = new_buffer();
+    // Triangle pointing down: drag from top to bottom
+    let x1 = 100;
+    let y1 = CANVAS_TOP + 50;
+    let x2 = 200;
+    let y2 = CANVAS_TOP + 150;
+
+    fill_triangle(&mut buffer, x1, y1, x2, y2, RED);
+
+    // Center of triangle should be filled
+    let mid_x = 150;
+    let mid_y = CANVAS_TOP + 100;
+    assert_eq!(buffer[mid_y * WIDTH + mid_x], RED, "Center should be filled");
+
+    // Top corners (base) should be filled
+    assert_eq!(buffer[y1 * WIDTH + x1], RED, "Top-left base");
+    assert_eq!(buffer[y1 * WIDTH + x2], RED, "Top-right base");
+}
+
+#[test]
+fn test_draw_shape_with_fill() {
+    let mut buffer = new_buffer();
+
+    // Draw rectangle with red fill and black edge
+    draw_shape_with_fill(
+        &mut buffer,
+        ToolMode::Rectangle,
+        100,
+        CANVAS_TOP + 50,
+        200,
+        CANVAS_TOP + 150,
+        Some(BLACK),
+        Some(RED),
+        1,
+    );
+
+    // Interior should be red (fill)
+    let interior_x = 150;
+    let interior_y = CANVAS_TOP + 100;
+    assert_eq!(buffer[interior_y * WIDTH + interior_x], RED, "Interior should be fill color");
+
+    // Edge should be black
+    let edge_y = CANVAS_TOP + 50;
+    assert_eq!(buffer[edge_y * WIDTH + 100], BLACK, "Edge should be edge color");
+}
+
+#[test]
+fn test_draw_shape_without_fill() {
+    let mut buffer = new_buffer();
+
+    // Draw rectangle with no fill (None)
+    draw_shape_with_fill(
+        &mut buffer,
+        ToolMode::Rectangle,
+        100,
+        CANVAS_TOP + 50,
+        200,
+        CANVAS_TOP + 150,
+        Some(BLACK),
+        None,
+        1,
+    );
+
+    // Interior should be white (no fill)
+    let interior_x = 150;
+    let interior_y = CANVAS_TOP + 100;
+    assert_eq!(buffer[interior_y * WIDTH + interior_x], WHITE, "Interior should be white (no fill)");
+
+    // Edge should be black
+    let edge_y = CANVAS_TOP + 50;
+    assert_eq!(buffer[edge_y * WIDTH + 100], BLACK, "Edge should be edge color");
 }
 
 #[test]

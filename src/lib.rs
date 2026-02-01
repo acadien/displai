@@ -153,7 +153,8 @@ pub fn parse_command(input: &str) -> Option<Command> {
 pub fn execute_command(
     cmd: &Command,
     buffer: &mut [u32],
-    selected_color_index: &mut usize,
+    edge_color_index: &mut Option<usize>,
+    fill_color_index: &mut Option<usize>,
     brush_size: &mut usize,
 ) -> Option<String> {
     match cmd {
@@ -165,7 +166,7 @@ pub fn execute_command(
             }
         }
         Command::Color(index) => {
-            *selected_color_index = *index;
+            *edge_color_index = Some(*index);
             None
         }
         Command::Size(size) => {
@@ -173,24 +174,39 @@ pub fn execute_command(
             None
         }
         Command::Stroke { x1, y1, x2, y2 } => {
-            let color = COLOR_PALETTE[*selected_color_index];
-            draw_brush_line(buffer, *x1, *y1, *x2, *y2, color, *brush_size);
+            if let Some(idx) = *edge_color_index {
+                let color = COLOR_PALETTE[idx];
+                draw_brush_line(buffer, *x1, *y1, *x2, *y2, color, *brush_size);
+            }
             None
         }
         Command::Dot { x, y } => {
-            let color = COLOR_PALETTE[*selected_color_index];
-            draw_circle(buffer, *x, *y, *brush_size, color);
+            if let Some(idx) = *edge_color_index {
+                let color = COLOR_PALETTE[idx];
+                draw_circle(buffer, *x, *y, *brush_size, color);
+            }
             None
         }
         Command::Clear => {
             clear_canvas(buffer);
             None
         }
-        Command::State => Some(format!(
-            "color:{} size:{}",
-            *selected_color_index,
-            *brush_size
-        )),
+        Command::State => {
+            let edge_str = match edge_color_index {
+                Some(i) => i.to_string(),
+                None => "none".to_string(),
+            };
+            let fill_str = match fill_color_index {
+                Some(i) => i.to_string(),
+                None => "none".to_string(),
+            };
+            Some(format!(
+                "edge:{} fill:{} size:{}",
+                edge_str,
+                fill_str,
+                *brush_size
+            ))
+        }
     }
 }
 
@@ -299,7 +315,9 @@ pub fn run() {
     let mut is_drawing = false;
     let mut last_pos: Option<(usize, usize)> = None;
     let mut mouse_was_down = false;
-    let mut selected_color_index: usize = 0;
+    let mut right_mouse_was_down = false;
+    let mut edge_color_index: Option<usize> = Some(0); // Some(index) = color, None = transparent
+    let mut fill_color_index: Option<usize> = None; // None = transparent (no fill)
     let mut brush_size: usize = DEFAULT_BRUSH_SIZE;
     let mut current_tool: ToolMode = ToolMode::default();
     let mut drag_start: Option<(usize, usize)> = None;
@@ -318,7 +336,8 @@ pub fn run() {
                         if let Some(response) = execute_command(
                             &cmd,
                             &mut buffer,
-                            &mut selected_color_index,
+                            &mut edge_color_index,
+                            &mut fill_color_index,
                             &mut brush_size,
                         ) {
                             println!("{}", response);
@@ -340,7 +359,8 @@ pub fn run() {
                         let response = execute_command(
                             &cmd,
                             &mut buffer,
-                            &mut selected_color_index,
+                            &mut edge_color_index,
+                            &mut fill_color_index,
                             &mut brush_size,
                         );
                         if let Some(resp) = response {
@@ -357,10 +377,12 @@ pub fn run() {
             }
         }
         draw_title_bar(&mut buffer);
-        draw_bottom_toolbar(&mut buffer, selected_color_index, brush_size, current_tool);
+        draw_bottom_toolbar(&mut buffer, edge_color_index, fill_color_index, brush_size, current_tool);
 
         let mouse_down = window.get_mouse_down(MouseButton::Left);
+        let right_mouse_down = window.get_mouse_down(MouseButton::Right);
         let mouse_clicked = mouse_down && !mouse_was_down;
+        let right_mouse_clicked = right_mouse_down && !right_mouse_was_down;
 
         if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Pass) {
             let x = mx as usize;
@@ -371,7 +393,10 @@ pub fn run() {
                     break;
                 }
                 if let Some(color_index) = get_clicked_color_index_bottom(x, y) {
-                    selected_color_index = color_index;
+                    edge_color_index = Some(color_index);
+                }
+                if is_in_transparent_button(x, y) {
+                    edge_color_index = None; // Transparent edge
                 }
                 if let Some(tool) = get_clicked_tool(x, y) {
                     current_tool = tool;
@@ -382,19 +407,44 @@ pub fn run() {
                 if is_in_plus_button(x, y) && brush_size < MAX_BRUSH_SIZE {
                     brush_size += 1;
                 }
+                if is_in_clear_button(x, y) {
+                    clear_canvas(&mut buffer);
+                }
+                // Click on fill indicator to toggle fill off
+                if is_in_fill_indicator(x, y) {
+                    fill_color_index = None;
+                }
             }
 
-            let pen_color = COLOR_PALETTE[selected_color_index];
+            // Right-click to set fill color
+            if right_mouse_clicked {
+                if let Some(color_index) = get_clicked_color_index_bottom(x, y) {
+                    // Toggle fill: if same color, turn off fill; otherwise set it
+                    if fill_color_index == Some(color_index) {
+                        fill_color_index = None;
+                    } else {
+                        fill_color_index = Some(color_index);
+                    }
+                }
+                if is_in_transparent_button(x, y) {
+                    fill_color_index = None; // Transparent fill
+                }
+            }
+
+            let edge_color = edge_color_index.map(|i| COLOR_PALETTE[i]);
+            let fill_color = fill_color_index.map(|i| COLOR_PALETTE[i]);
 
             // Freehand drawing only in Brush mode
             if current_tool == ToolMode::Brush {
                 if mouse_down && x < WIDTH && (CANVAS_TOP..CANVAS_BOTTOM).contains(&y) {
-                    if is_drawing {
-                        if let Some((lx, ly)) = last_pos {
-                            draw_brush_line(&mut buffer, lx, ly, x, y, pen_color, brush_size);
+                    if let Some(color) = edge_color {
+                        if is_drawing {
+                            if let Some((lx, ly)) = last_pos {
+                                draw_brush_line(&mut buffer, lx, ly, x, y, color, brush_size);
+                            }
+                        } else {
+                            draw_circle(&mut buffer, x, y, brush_size, color);
                         }
-                    } else {
-                        draw_circle(&mut buffer, x, y, brush_size, pen_color);
                     }
                     is_drawing = true;
                     last_pos = Some((x, y));
@@ -413,14 +463,15 @@ pub fn run() {
                     // Mouse released - draw the shape if we have a valid drag
                     if let Some((start_x, start_y)) = drag_start {
                         if in_canvas {
-                            draw_shape(
+                            draw_shape_with_fill(
                                 &mut buffer,
                                 current_tool,
                                 start_x,
                                 start_y,
                                 x,
                                 y,
-                                pen_color,
+                                edge_color,
+                                fill_color,
                                 brush_size,
                             );
                         }
@@ -437,6 +488,7 @@ pub fn run() {
         }
 
         mouse_was_down = mouse_down;
+        right_mouse_was_down = right_mouse_down;
 
         window
             .update_with_buffer(&buffer, WIDTH, HEIGHT)
@@ -485,6 +537,172 @@ pub fn draw_button_border(buffer: &mut [u32], bx: usize, by: usize, color: u32) 
             buffer[y * WIDTH + bx + BUTTON_SIZE - 1] = color;
         }
     }
+}
+
+pub fn draw_button_inner_border(buffer: &mut [u32], bx: usize, by: usize, color: u32) {
+    // Draw a border 1 pixel inside the button
+    for x in (bx + 1)..(bx + BUTTON_SIZE - 1) {
+        if x < WIDTH {
+            buffer[(by + 1) * WIDTH + x] = color;
+            buffer[(by + BUTTON_SIZE - 2) * WIDTH + x] = color;
+        }
+    }
+    for y in (by + 1)..(by + BUTTON_SIZE - 1) {
+        if y < HEIGHT {
+            buffer[y * WIDTH + bx + 1] = color;
+            buffer[y * WIDTH + bx + BUTTON_SIZE - 2] = color;
+        }
+    }
+}
+
+/// Draw the transparent color button with checkerboard pattern
+pub fn draw_transparent_button(buffer: &mut [u32], bx: usize, by: usize, edge_selected: bool, fill_selected: bool) {
+    // Draw checkerboard pattern
+    for dy in 0..BUTTON_SIZE {
+        for dx in 0..BUTTON_SIZE {
+            let px = bx + dx;
+            let py = by + dy;
+            if px < WIDTH && py < HEIGHT {
+                let checker = ((dx / 4) + (dy / 4)) % 2 == 0;
+                buffer[py * WIDTH + px] = if checker { WHITE } else { GRAY };
+            }
+        }
+    }
+
+    // Draw border based on selection
+    if edge_selected && fill_selected {
+        draw_button_border(buffer, bx, by, WHITE);
+        draw_button_inner_border(buffer, bx, by, 0x40E040);
+    } else if edge_selected {
+        draw_button_border(buffer, bx, by, WHITE);
+    } else if fill_selected {
+        draw_button_border(buffer, bx, by, 0x40E040);
+    } else {
+        draw_button_border(buffer, bx, by, DARK_GRAY);
+    }
+}
+
+/// Check if click is on transparent button
+pub fn is_in_transparent_button(x: usize, y: usize) -> bool {
+    let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
+    let transparent_x = BUTTON_MARGIN + 14 * (BUTTON_SIZE + BUTTON_MARGIN);
+    x >= transparent_x && x < transparent_x + BUTTON_SIZE && y >= row1_y && y < row1_y + BUTTON_SIZE
+}
+
+/// Draw edge/fill color indicator showing current colors
+pub fn draw_edge_fill_indicator(
+    buffer: &mut [u32],
+    x: usize,
+    y: usize,
+    edge_color_index: Option<usize>,
+    fill_color_index: Option<usize>,
+) {
+    let size = 20;
+    let offset = 8;
+
+    // Draw fill color square (behind, offset)
+    if let Some(fill_idx) = fill_color_index {
+        let fill_color = COLOR_PALETTE[fill_idx];
+        for dy in 0..size {
+            for dx in 0..size {
+                let px = x + offset + dx;
+                let py = y + offset + dy;
+                if px < WIDTH && py < HEIGHT {
+                    buffer[py * WIDTH + px] = fill_color;
+                }
+            }
+        }
+        // Border for fill square
+        for dx in 0..size {
+            buffer[(y + offset) * WIDTH + x + offset + dx] = DARK_GRAY;
+            buffer[(y + offset + size - 1) * WIDTH + x + offset + dx] = DARK_GRAY;
+        }
+        for dy in 0..size {
+            buffer[(y + offset + dy) * WIDTH + x + offset] = DARK_GRAY;
+            buffer[(y + offset + dy) * WIDTH + x + offset + size - 1] = DARK_GRAY;
+        }
+    } else {
+        // Draw "no fill" indicator (checkerboard for transparent)
+        for dy in 0..size {
+            for dx in 0..size {
+                let px = x + offset + dx;
+                let py = y + offset + dy;
+                if px < WIDTH && py < HEIGHT {
+                    let checker = ((dx / 4) + (dy / 4)) % 2 == 0;
+                    buffer[py * WIDTH + px] = if checker { WHITE } else { GRAY };
+                }
+            }
+        }
+        // Border
+        for dx in 0..size {
+            buffer[(y + offset) * WIDTH + x + offset + dx] = DARK_GRAY;
+            buffer[(y + offset + size - 1) * WIDTH + x + offset + dx] = DARK_GRAY;
+        }
+        for dy in 0..size {
+            buffer[(y + offset + dy) * WIDTH + x + offset] = DARK_GRAY;
+            buffer[(y + offset + dy) * WIDTH + x + offset + size - 1] = DARK_GRAY;
+        }
+    }
+
+    // Draw edge color square (front, at origin)
+    if let Some(edge_idx) = edge_color_index {
+        let edge_color = COLOR_PALETTE[edge_idx];
+        for dy in 0..size {
+            for dx in 0..size {
+                let px = x + dx;
+                let py = y + dy;
+                if px < WIDTH && py < HEIGHT {
+                    buffer[py * WIDTH + px] = edge_color;
+                }
+            }
+        }
+        // Border for edge square
+        let border_color = if edge_color == WHITE { DARK_GRAY } else { WHITE };
+        for dx in 0..size {
+            buffer[y * WIDTH + x + dx] = border_color;
+            buffer[(y + size - 1) * WIDTH + x + dx] = border_color;
+        }
+        for dy in 0..size {
+            buffer[(y + dy) * WIDTH + x] = border_color;
+            buffer[(y + dy) * WIDTH + x + size - 1] = border_color;
+        }
+    } else {
+        // Draw checkerboard for transparent edge
+        for dy in 0..size {
+            for dx in 0..size {
+                let px = x + dx;
+                let py = y + dy;
+                if px < WIDTH && py < HEIGHT {
+                    let checker = ((dx / 4) + (dy / 4)) % 2 == 0;
+                    buffer[py * WIDTH + px] = if checker { WHITE } else { GRAY };
+                }
+            }
+        }
+        // Border
+        for dx in 0..size {
+            buffer[y * WIDTH + x + dx] = DARK_GRAY;
+            buffer[(y + size - 1) * WIDTH + x + dx] = DARK_GRAY;
+        }
+        for dy in 0..size {
+            buffer[(y + dy) * WIDTH + x] = DARK_GRAY;
+            buffer[(y + dy) * WIDTH + x + size - 1] = DARK_GRAY;
+        }
+    }
+}
+
+/// Check if click is on the fill indicator (to clear fill)
+pub fn is_in_fill_indicator(x: usize, y: usize) -> bool {
+    let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
+    let transparent_x = BUTTON_MARGIN + 14 * (BUTTON_SIZE + BUTTON_MARGIN);
+    let indicator_x = transparent_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
+    let offset = 8;
+    let size = 20;
+
+    // Check if in the fill square area (the back square)
+    x >= indicator_x + offset
+        && x < indicator_x + offset + size
+        && y >= row1_y + offset
+        && y < row1_y + offset + size
 }
 
 pub fn draw_x(buffer: &mut [u32], bx: usize, by: usize) {
@@ -571,7 +789,8 @@ pub fn draw_line(buffer: &mut [u32], x0: usize, y0: usize, x1: usize, y1: usize,
 
 pub fn draw_bottom_toolbar(
     buffer: &mut [u32],
-    selected_color_index: usize,
+    edge_color_index: Option<usize>,
+    fill_color_index: Option<usize>,
     brush_size: usize,
     current_tool: ToolMode,
 ) {
@@ -589,20 +808,38 @@ pub fn draw_bottom_toolbar(
         buffer[toolbar_top * WIDTH + x] = DARK_GRAY;
     }
 
-    // Row 1: 14 color buttons (Black, White, then colors)
+    // Row 1: 14 color buttons + transparent button + edge/fill indicator
     let row1_y = toolbar_top + BUTTON_MARGIN;
     for (i, &color) in COLOR_PALETTE.iter().enumerate() {
         let bx = BUTTON_MARGIN + i * (BUTTON_SIZE + BUTTON_MARGIN);
         draw_button(buffer, bx, row1_y, color);
 
-        // Draw border to indicate selection (use blue for white button to be visible)
-        if i == selected_color_index {
+        // Draw border: white/blue for edge selection, green for fill selection
+        let is_edge = edge_color_index == Some(i);
+        let is_fill = fill_color_index == Some(i);
+
+        if is_edge && is_fill {
+            // Both edge and fill: white outer, green inner
             let border_color = if color == WHITE { 0x4040E0 } else { WHITE };
             draw_button_border(buffer, bx, row1_y, border_color);
+            draw_button_inner_border(buffer, bx, row1_y, 0x40E040); // Green inner for fill
+        } else if is_edge {
+            let border_color = if color == WHITE { 0x4040E0 } else { WHITE };
+            draw_button_border(buffer, bx, row1_y, border_color);
+        } else if is_fill {
+            draw_button_border(buffer, bx, row1_y, 0x40E040); // Green for fill
         } else {
             draw_button_border(buffer, bx, row1_y, DARK_GRAY);
         }
     }
+
+    // Transparent button (after 14 color buttons)
+    let transparent_x = BUTTON_MARGIN + 14 * (BUTTON_SIZE + BUTTON_MARGIN);
+    draw_transparent_button(buffer, transparent_x, row1_y, edge_color_index.is_none(), fill_color_index.is_none());
+
+    // Edge/Fill indicator (after transparent button)
+    let indicator_x = transparent_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
+    draw_edge_fill_indicator(buffer, indicator_x, row1_y, edge_color_index, fill_color_index);
 
     // Row 2: Tool buttons + Size display + [-] [+] buttons
     let row2_y = toolbar_top + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
@@ -644,6 +881,11 @@ pub fn draw_bottom_toolbar(
     let plus_x = minus_x + BUTTON_SIZE + BUTTON_MARGIN;
     draw_button(buffer, plus_x, row2_y, DARK_GRAY);
     draw_plus_icon(buffer, plus_x, row2_y);
+
+    // Clear button
+    let clear_x = plus_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
+    draw_button(buffer, clear_x, row2_y, 0xC04040); // Reddish color
+    draw_clear_icon(buffer, clear_x, row2_y);
 }
 
 /// Draw an icon representing a tool
@@ -796,6 +1038,29 @@ pub fn draw_plus_icon(buffer: &mut [u32], bx: usize, by: usize) {
     for y in start_y..end_y {
         if mid_x < WIDTH && y < HEIGHT {
             buffer[y * WIDTH + mid_x] = WHITE;
+        }
+    }
+}
+
+pub fn draw_clear_icon(buffer: &mut [u32], bx: usize, by: usize) {
+    // Draw an X to represent clear
+    let padding = 6;
+    let start = padding;
+    let end = BUTTON_SIZE - padding;
+
+    for i in 0..(end - start) {
+        // Top-left to bottom-right diagonal
+        let x1 = bx + start + i;
+        let y1 = by + start + i;
+        if x1 < WIDTH && y1 < HEIGHT {
+            buffer[y1 * WIDTH + x1] = WHITE;
+        }
+
+        // Top-right to bottom-left diagonal
+        let x2 = bx + end - 1 - i;
+        let y2 = by + start + i;
+        if x2 < WIDTH && y2 < HEIGHT {
+            buffer[y2 * WIDTH + x2] = WHITE;
         }
     }
 }
@@ -976,7 +1241,179 @@ pub fn draw_shape(
     }
 }
 
-/// Draw a square from drag start to end (side length = max of width/height)
+/// Draw a shape with optional edge and fill colors
+/// Fill is drawn first, then edge on top
+pub fn draw_shape_with_fill(
+    buffer: &mut [u32],
+    tool: ToolMode,
+    x1: usize,
+    y1: usize,
+    x2: usize,
+    y2: usize,
+    edge_color: Option<u32>,
+    fill_color: Option<u32>,
+    brush_size: usize,
+) {
+    // Draw fill first (if any)
+    if let Some(fill) = fill_color {
+        match tool {
+            ToolMode::Brush | ToolMode::Line => {
+                // Lines don't have fill
+            }
+            ToolMode::Square => {
+                fill_square(buffer, x1, y1, x2, y2, fill);
+            }
+            ToolMode::Rectangle => {
+                fill_rectangle(buffer, x1, y1, x2, y2, fill);
+            }
+            ToolMode::Circle => {
+                fill_circle(buffer, x1, y1, x2, y2, fill);
+            }
+            ToolMode::Oval => {
+                fill_oval(buffer, x1, y1, x2, y2, fill);
+            }
+            ToolMode::Triangle => {
+                fill_triangle(buffer, x1, y1, x2, y2, fill);
+            }
+        }
+    }
+
+    // Draw edge on top (if any)
+    if let Some(edge) = edge_color {
+        draw_shape(buffer, tool, x1, y1, x2, y2, edge, brush_size);
+    }
+}
+
+/// Fill a square region (largest square that fits in drag bounds)
+pub fn fill_square(buffer: &mut [u32], x1: usize, y1: usize, x2: usize, y2: usize, color: u32) {
+    let (left, right) = if x1 < x2 { (x1, x2) } else { (x2, x1) };
+    let (top, bottom) = if y1 < y2 { (y1, y2) } else { (y2, y1) };
+
+    let width = right - left;
+    let height = bottom - top;
+    let side = width.min(height);
+
+    for y in top..=top + side {
+        for x in left..=left + side {
+            set_pixel(buffer, x, y, color);
+        }
+    }
+}
+
+/// Fill a rectangle region
+pub fn fill_rectangle(buffer: &mut [u32], x1: usize, y1: usize, x2: usize, y2: usize, color: u32) {
+    let (left, right) = if x1 < x2 { (x1, x2) } else { (x2, x1) };
+    let (top, bottom) = if y1 < y2 { (y1, y2) } else { (y2, y1) };
+
+    for y in top..=bottom {
+        for x in left..=right {
+            set_pixel(buffer, x, y, color);
+        }
+    }
+}
+
+/// Fill a circle region
+pub fn fill_circle(buffer: &mut [u32], x1: usize, y1: usize, x2: usize, y2: usize, color: u32) {
+    let (left, right) = if x1 < x2 { (x1, x2) } else { (x2, x1) };
+    let (top, bottom) = if y1 < y2 { (y1, y2) } else { (y2, y1) };
+
+    let width = right - left;
+    let height = bottom - top;
+    let diameter = width.min(height);
+    let radius = diameter as f64 / 2.0;
+
+    let cx = left as f64 + diameter as f64 / 2.0;
+    let cy = top as f64 + diameter as f64 / 2.0;
+
+    for y in top..=top + diameter {
+        for x in left..=left + diameter {
+            let dx = x as f64 - cx;
+            let dy = y as f64 - cy;
+            if dx * dx + dy * dy <= radius * radius {
+                set_pixel(buffer, x, y, color);
+            }
+        }
+    }
+}
+
+/// Fill an oval region
+pub fn fill_oval(buffer: &mut [u32], x1: usize, y1: usize, x2: usize, y2: usize, color: u32) {
+    let (left, right) = if x1 < x2 { (x1, x2) } else { (x2, x1) };
+    let (top, bottom) = if y1 < y2 { (y1, y2) } else { (y2, y1) };
+
+    let cx = (left + right) as f64 / 2.0;
+    let cy = (top + bottom) as f64 / 2.0;
+    let rx = (right - left) as f64 / 2.0;
+    let ry = (bottom - top) as f64 / 2.0;
+
+    if rx == 0.0 || ry == 0.0 {
+        return;
+    }
+
+    for y in top..=bottom {
+        for x in left..=right {
+            let dx = (x as f64 - cx) / rx;
+            let dy = (y as f64 - cy) / ry;
+            if dx * dx + dy * dy <= 1.0 {
+                set_pixel(buffer, x, y, color);
+            }
+        }
+    }
+}
+
+/// Fill a triangle region using scanline algorithm
+pub fn fill_triangle(buffer: &mut [u32], x1: usize, y1: usize, x2: usize, y2: usize, color: u32) {
+    let (left, right) = if x1 < x2 { (x1, x2) } else { (x2, x1) };
+    let (top, bottom) = if y1 < y2 { (y1, y2) } else { (y2, y1) };
+    let pointing_up = y2 < y1;
+
+    let mid_x = (left + right) / 2;
+
+    if pointing_up {
+        // Apex at top, base at bottom
+        let apex = (mid_x as f64, top as f64);
+        let left_base = (left as f64, bottom as f64);
+        let right_base = (right as f64, bottom as f64);
+
+        for y in top..=bottom {
+            let yf = y as f64;
+            // Find x bounds at this y
+            let t = if bottom != top {
+                (yf - top as f64) / (bottom - top) as f64
+            } else {
+                0.0
+            };
+            let x_left = apex.0 + t * (left_base.0 - apex.0);
+            let x_right = apex.0 + t * (right_base.0 - apex.0);
+
+            for x in (x_left as usize)..=(x_right as usize) {
+                set_pixel(buffer, x, y, color);
+            }
+        }
+    } else {
+        // Apex at bottom, base at top
+        let apex = (mid_x as f64, bottom as f64);
+        let left_base = (left as f64, top as f64);
+        let right_base = (right as f64, top as f64);
+
+        for y in top..=bottom {
+            let yf = y as f64;
+            let t = if bottom != top {
+                (bottom as f64 - yf) / (bottom - top) as f64
+            } else {
+                0.0
+            };
+            let x_left = apex.0 + t * (left_base.0 - apex.0);
+            let x_right = apex.0 + t * (right_base.0 - apex.0);
+
+            for x in (x_left as usize)..=(x_right as usize) {
+                set_pixel(buffer, x, y, color);
+            }
+        }
+    }
+}
+
+/// Draw a square from corner to corner (largest square that fits in drag bounds)
 pub fn draw_shape_square(
     buffer: &mut [u32],
     x1: usize,
@@ -986,15 +1423,13 @@ pub fn draw_shape_square(
     color: u32,
     brush_size: usize,
 ) {
-    let dx = if x2 > x1 { x2 - x1 } else { x1 - x2 };
-    let dy = if y2 > y1 { y2 - y1 } else { y1 - y2 };
-    let side = dx.max(dy);
+    let (left, right) = if x1 < x2 { (x1, x2) } else { (x2, x1) };
+    let (top, bottom) = if y1 < y2 { (y1, y2) } else { (y2, y1) };
 
-    // Determine direction
-    let (left, top) = (
-        if x2 >= x1 { x1 } else { x1.saturating_sub(side) },
-        if y2 >= y1 { y1 } else { y1.saturating_sub(side) },
-    );
+    let width = right - left;
+    let height = bottom - top;
+    let side = width.min(height);
+
     let right = left + side;
     let bottom = top + side;
 
@@ -1221,4 +1656,13 @@ pub fn is_in_plus_button(x: usize, y: usize) -> bool {
     let minus_x = size_display_x + 44 + BUTTON_MARGIN;
     let plus_x = minus_x + BUTTON_SIZE + BUTTON_MARGIN;
     x >= plus_x && x < plus_x + BUTTON_SIZE && y >= row2_y && y < row2_y + BUTTON_SIZE
+}
+
+pub fn is_in_clear_button(x: usize, y: usize) -> bool {
+    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
+    let size_display_x = BUTTON_MARGIN + 7 * (BUTTON_SIZE + BUTTON_MARGIN) + BUTTON_MARGIN;
+    let minus_x = size_display_x + 44 + BUTTON_MARGIN;
+    let plus_x = minus_x + BUTTON_SIZE + BUTTON_MARGIN;
+    let clear_x = plus_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
+    x >= clear_x && x < clear_x + BUTTON_SIZE && y >= row2_y && y < row2_y + BUTTON_SIZE
 }
