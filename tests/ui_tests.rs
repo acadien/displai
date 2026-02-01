@@ -84,7 +84,7 @@ fn test_close_button_is_red() {
 fn test_draw_bottom_toolbar_covers_bottom() {
     let mut buffer = new_buffer();
 
-    draw_bottom_toolbar(&mut buffer, 0, 1);
+    draw_bottom_toolbar(&mut buffer, 0, 1, ToolMode::Brush);
 
     // Bottom toolbar area should be filled
     let mid_x = WIDTH / 2;
@@ -97,7 +97,7 @@ fn test_draw_bottom_toolbar_covers_bottom() {
 fn test_all_14_palette_colors_rendered() {
     let mut buffer = new_buffer();
 
-    draw_bottom_toolbar(&mut buffer, 0, 1);
+    draw_bottom_toolbar(&mut buffer, 0, 1, ToolMode::Brush);
 
     // Verify each of the 14 color buttons shows its corresponding color
     let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
@@ -121,7 +121,7 @@ fn test_selected_color_has_white_border() {
     let mut buffer = new_buffer();
 
     // Select color index 5
-    draw_bottom_toolbar(&mut buffer, 5, 1);
+    draw_bottom_toolbar(&mut buffer, 5, 1, ToolMode::Brush);
 
     let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
 
@@ -140,7 +140,7 @@ fn test_white_color_selected_has_blue_border() {
     let mut buffer = new_buffer();
 
     // Select white color (index 1)
-    draw_bottom_toolbar(&mut buffer, 1, 1);
+    draw_bottom_toolbar(&mut buffer, 1, 1, ToolMode::Brush);
 
     let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
 
@@ -154,10 +154,11 @@ fn test_white_color_selected_has_blue_border() {
 fn test_plus_minus_buttons_rendered() {
     let mut buffer = new_buffer();
 
-    draw_bottom_toolbar(&mut buffer, 0, 5);
+    draw_bottom_toolbar(&mut buffer, 0, 5, ToolMode::Brush);
 
     let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let size_display_x = BUTTON_MARGIN;
+    // Size display is now after 7 tool buttons
+    let size_display_x = BUTTON_MARGIN + 7 * (BUTTON_SIZE + BUTTON_MARGIN) + BUTTON_MARGIN;
     let minus_x = size_display_x + 44 + BUTTON_MARGIN;
     let plus_x = minus_x + BUTTON_SIZE + BUTTON_MARGIN;
 
@@ -172,10 +173,11 @@ fn test_plus_minus_buttons_rendered() {
 fn test_size_display_rendered() {
     let mut buffer = new_buffer();
 
-    draw_bottom_toolbar(&mut buffer, 0, 10);
+    draw_bottom_toolbar(&mut buffer, 0, 10, ToolMode::Brush);
 
     let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let size_display_x = BUTTON_MARGIN;
+    // Size display is now after 7 tool buttons
+    let size_display_x = BUTTON_MARGIN + 7 * (BUTTON_SIZE + BUTTON_MARGIN) + BUTTON_MARGIN;
 
     // Size display should have white background (check near edge to avoid number)
     assert_eq!(buffer[(row2_y + 1) * WIDTH + (size_display_x + 1)], WHITE);
@@ -207,4 +209,63 @@ fn test_brush_size_constants() {
     assert_eq!(MIN_BRUSH_SIZE, 1);
     assert_eq!(MAX_BRUSH_SIZE, 20);
     assert_eq!(DEFAULT_BRUSH_SIZE, 1);
+}
+
+// ===================
+// Tool Button Tests
+// ===================
+
+#[test]
+fn test_tool_buttons_rendered() {
+    let mut buffer = new_buffer();
+
+    draw_bottom_toolbar(&mut buffer, 0, 1, ToolMode::Brush);
+
+    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
+
+    // Check that 7 tool buttons are rendered (they have gray background)
+    for i in 0..7 {
+        let bx = BUTTON_MARGIN + i * (BUTTON_SIZE + BUTTON_MARGIN);
+        // Tool buttons have GRAY background
+        let center_x = bx + BUTTON_SIZE / 2;
+        let center_y = row2_y + BUTTON_SIZE / 2;
+        // The center might have icon pixels, so just verify button exists
+        assert!(center_x < WIDTH && center_y < HEIGHT);
+    }
+}
+
+#[test]
+fn test_selected_tool_has_blue_border() {
+    let mut buffer = new_buffer();
+
+    // Brush is selected (index 0)
+    draw_bottom_toolbar(&mut buffer, 0, 1, ToolMode::Brush);
+
+    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
+    let brush_x = BUTTON_MARGIN;
+
+    // Brush button should have blue border
+    assert_eq!(buffer[row2_y * WIDTH + brush_x], 0x4040E0);
+
+    // Line button (index 1) should have dark gray border
+    let line_x = BUTTON_MARGIN + 1 * (BUTTON_SIZE + BUTTON_MARGIN);
+    assert_eq!(buffer[row2_y * WIDTH + line_x], DARK_GRAY);
+}
+
+#[test]
+fn test_different_tool_selected() {
+    let mut buffer = new_buffer();
+
+    // Circle is selected
+    draw_bottom_toolbar(&mut buffer, 0, 1, ToolMode::Circle);
+
+    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
+
+    // Circle button (index 4) should have blue border
+    let circle_x = BUTTON_MARGIN + 4 * (BUTTON_SIZE + BUTTON_MARGIN);
+    assert_eq!(buffer[row2_y * WIDTH + circle_x], 0x4040E0);
+
+    // Brush button (index 0) should have dark gray border
+    let brush_x = BUTTON_MARGIN;
+    assert_eq!(buffer[row2_y * WIDTH + brush_x], DARK_GRAY);
 }

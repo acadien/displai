@@ -370,3 +370,291 @@ fn test_brush_size_pixel_count_progression() {
         "Max brush size should draw more pixels than min size"
     );
 }
+
+// ===================
+// Shape Drawing Tests
+// ===================
+
+#[test]
+fn test_draw_shape_line() {
+    let mut buffer = new_buffer();
+    let y = CANVAS_TOP + 100;
+
+    draw_shape(&mut buffer, ToolMode::Line, 50, y, 150, y, BLACK, 1);
+
+    // Check that pixels along the line are drawn
+    for x in 50..=150 {
+        assert_eq!(buffer[y * WIDTH + x], BLACK, "Line pixel at x={} should be black", x);
+    }
+}
+
+#[test]
+fn test_draw_shape_rectangle() {
+    let mut buffer = new_buffer();
+    let x1 = 100;
+    let y1 = CANVAS_TOP + 50;
+    let x2 = 200;
+    let y2 = CANVAS_TOP + 150;
+
+    draw_shape_rectangle(&mut buffer, x1, y1, x2, y2, BLACK, 1);
+
+    // Check top edge
+    for x in x1..=x2 {
+        assert_eq!(buffer[y1 * WIDTH + x], BLACK, "Top edge at x={}", x);
+    }
+
+    // Check bottom edge
+    for x in x1..=x2 {
+        assert_eq!(buffer[y2 * WIDTH + x], BLACK, "Bottom edge at x={}", x);
+    }
+
+    // Check left edge
+    for y in y1..=y2 {
+        assert_eq!(buffer[y * WIDTH + x1], BLACK, "Left edge at y={}", y);
+    }
+
+    // Check right edge
+    for y in y1..=y2 {
+        assert_eq!(buffer[y * WIDTH + x2], BLACK, "Right edge at y={}", y);
+    }
+
+    // Check interior is empty (not filled)
+    assert_eq!(buffer[(y1 + 50) * WIDTH + (x1 + 50)], WHITE, "Interior should be white");
+}
+
+#[test]
+fn test_draw_shape_rectangle_reverse_coords() {
+    let mut buffer = new_buffer();
+    // Draw with reversed coordinates (end before start)
+    let x1 = 200;
+    let y1 = CANVAS_TOP + 150;
+    let x2 = 100;
+    let y2 = CANVAS_TOP + 50;
+
+    draw_shape_rectangle(&mut buffer, x1, y1, x2, y2, BLACK, 1);
+
+    // Rectangle should still be drawn correctly (at same position as forward coords)
+    let top = CANVAS_TOP + 50;
+    let left = 100;
+
+    assert_eq!(buffer[top * WIDTH + left], BLACK, "Top-left corner");
+    assert_eq!(buffer[top * WIDTH + 200], BLACK, "Top-right corner");
+}
+
+#[test]
+fn test_draw_shape_square() {
+    let mut buffer = new_buffer();
+    let x1 = 100;
+    let y1 = CANVAS_TOP + 100;
+    let x2 = 200;
+    let y2 = CANVAS_TOP + 150;  // Drag defines a rectangle, but we draw a square
+
+    draw_shape_square(&mut buffer, x1, y1, x2, y2, BLACK, 1);
+
+    // The side length should be max(dx, dy) = max(100, 50) = 100
+    // So we get a 100x100 square starting at (100, CANVAS_TOP+100)
+
+    // Check all four corners are black
+    assert_eq!(buffer[y1 * WIDTH + x1], BLACK, "Top-left corner");
+    assert_eq!(buffer[y1 * WIDTH + (x1 + 100)], BLACK, "Top-right corner");
+    assert_eq!(buffer[(y1 + 100) * WIDTH + x1], BLACK, "Bottom-left corner");
+    assert_eq!(buffer[(y1 + 100) * WIDTH + (x1 + 100)], BLACK, "Bottom-right corner");
+}
+
+#[test]
+fn test_draw_shape_circle() {
+    let mut buffer = new_buffer();
+    // Circle bounded by rectangle from (300, 200) to (400, 300)
+    // This is a 100x100 box, so diameter = 100, radius = 50
+    // Center will be at (350, 250)
+    let x1 = 300;
+    let y1 = 200;
+    let x2 = 400;
+    let y2 = 300;
+
+    draw_shape_circle(&mut buffer, x1, y1, x2, y2, BLACK, 1);
+
+    let cx = 350;
+    let cy = 250;
+    let radius = 50;
+
+    // Check some points on the circle
+    // Right point
+    assert_eq!(buffer[cy * WIDTH + (cx + radius)], BLACK, "Right point of circle");
+
+    // Left point
+    assert_eq!(buffer[cy * WIDTH + (cx - radius)], BLACK, "Left point of circle");
+
+    // Top point
+    assert_eq!(buffer[(cy - radius) * WIDTH + cx], BLACK, "Top point of circle");
+
+    // Bottom point
+    assert_eq!(buffer[(cy + radius) * WIDTH + cx], BLACK, "Bottom point of circle");
+
+    // Center should be empty (circle is outline only)
+    assert_eq!(buffer[cy * WIDTH + cx], WHITE, "Center should be white");
+}
+
+#[test]
+fn test_draw_shape_oval() {
+    let mut buffer = new_buffer();
+    let x1 = 300;
+    let y1 = CANVAS_TOP + 100;
+    let x2 = 500;
+    let y2 = CANVAS_TOP + 200;
+
+    draw_shape_oval(&mut buffer, x1, y1, x2, y2, BLACK, 1);
+
+    // Check points on the oval
+    // Center is at (400, CANVAS_TOP+150), rx=100, ry=50
+    let cx = 400;
+    let cy = CANVAS_TOP + 150;
+
+    // Right point
+    assert_eq!(buffer[cy * WIDTH + (cx + 100)], BLACK, "Right point of oval");
+
+    // Left point
+    assert_eq!(buffer[cy * WIDTH + (cx - 100)], BLACK, "Left point of oval");
+
+    // Top point
+    assert_eq!(buffer[(cy - 50) * WIDTH + cx], BLACK, "Top point of oval");
+
+    // Bottom point
+    assert_eq!(buffer[(cy + 50) * WIDTH + cx], BLACK, "Bottom point of oval");
+
+    // Center should be empty
+    assert_eq!(buffer[cy * WIDTH + cx], WHITE, "Center should be white");
+}
+
+#[test]
+fn test_draw_shape_triangle_pointing_down() {
+    let mut buffer = new_buffer();
+    let x1 = 100;
+    let y1 = CANVAS_TOP + 50;
+    let x2 = 200;
+    let y2 = CANVAS_TOP + 150;
+
+    // Dragging downward: triangle points down (apex at bottom, base at top)
+    draw_shape_triangle(&mut buffer, x1, y1, x2, y2, BLACK, 1);
+
+    // Apex at bottom center (150, CANVAS_TOP+150)
+    let apex_x = 150;
+    let apex_y = CANVAS_TOP + 150;
+
+    // Base at top
+    let base_y = CANVAS_TOP + 50;
+
+    // Check apex is black
+    assert_eq!(buffer[apex_y * WIDTH + apex_x], BLACK, "Apex of triangle (at bottom)");
+
+    // Check base is drawn at top
+    for x in x1..=x2 {
+        assert_eq!(buffer[base_y * WIDTH + x], BLACK, "Base at x={}", x);
+    }
+}
+
+#[test]
+fn test_draw_shape_triangle_pointing_up() {
+    let mut buffer = new_buffer();
+    // Dragging upward: start below, end above -> triangle points up
+    let x1 = 100;
+    let y1 = CANVAS_TOP + 150;  // Start lower
+    let x2 = 200;
+    let y2 = CANVAS_TOP + 50;   // End higher (dragging up)
+
+    draw_shape_triangle(&mut buffer, x1, y1, x2, y2, BLACK, 1);
+
+    // Pointing up: apex at top, base at bottom
+    let apex_x = 150;
+    let apex_y = CANVAS_TOP + 50;
+    let base_y = CANVAS_TOP + 150;
+
+    // Check apex is at top
+    assert_eq!(buffer[apex_y * WIDTH + apex_x], BLACK, "Apex of triangle (at top)");
+
+    // Check base is at bottom
+    for x in 100..=200 {
+        assert_eq!(buffer[base_y * WIDTH + x], BLACK, "Base at bottom, x={}", x);
+    }
+}
+
+#[test]
+fn test_draw_shape_with_larger_brush() {
+    let mut buffer1 = new_buffer();
+    let mut buffer2 = new_buffer();
+
+    // Draw same rectangle with different brush sizes
+    draw_shape_rectangle(&mut buffer1, 100, CANVAS_TOP + 50, 200, CANVAS_TOP + 150, BLACK, 1);
+    draw_shape_rectangle(&mut buffer2, 100, CANVAS_TOP + 50, 200, CANVAS_TOP + 150, BLACK, 5);
+
+    // Larger brush should draw more pixels
+    let count1 = count_drawn_pixels(&buffer1);
+    let count2 = count_drawn_pixels(&buffer2);
+
+    assert!(count2 > count1, "Larger brush ({}) should draw more pixels than smaller brush ({})", count2, count1);
+}
+
+#[test]
+fn test_draw_shape_dispatcher() {
+    // Test that draw_shape dispatches correctly to each shape function
+    let mut buffer = new_buffer();
+    let y = CANVAS_TOP + 100;
+
+    // Line
+    draw_shape(&mut buffer, ToolMode::Line, 50, y, 100, y, BLACK, 1);
+    assert_eq!(buffer[y * WIDTH + 75], BLACK, "Line via dispatcher");
+
+    // Rectangle
+    let mut buffer = new_buffer();
+    draw_shape(&mut buffer, ToolMode::Rectangle, 100, y, 150, y + 50, BLACK, 1);
+    assert_eq!(buffer[y * WIDTH + 100], BLACK, "Rectangle via dispatcher");
+
+    // Square
+    let mut buffer = new_buffer();
+    draw_shape(&mut buffer, ToolMode::Square, 100, y, 150, y + 30, BLACK, 1);
+    assert_eq!(buffer[y * WIDTH + 100], BLACK, "Square via dispatcher");
+
+    // Circle (bounding box from 350,250 to 450,350 -> 100x100 circle, center at 400,300)
+    let mut buffer = new_buffer();
+    draw_shape(&mut buffer, ToolMode::Circle, 350, 250, 450, 350, BLACK, 1);
+    // Right edge of circle at center_x + radius = 400 + 50 = 450
+    assert_eq!(buffer[300 * WIDTH + 450], BLACK, "Circle via dispatcher");
+
+    // Oval
+    let mut buffer = new_buffer();
+    draw_shape(&mut buffer, ToolMode::Oval, 300, y, 400, y + 50, BLACK, 1);
+    let cy = y + 25;
+    assert_eq!(buffer[cy * WIDTH + 400], BLACK, "Oval via dispatcher");
+
+    // Triangle (drag down = points down, apex at bottom)
+    let mut buffer = new_buffer();
+    draw_shape(&mut buffer, ToolMode::Triangle, 100, y, 200, y + 100, BLACK, 1);
+    // Apex at bottom center when dragging down
+    assert_eq!(buffer[(y + 100) * WIDTH + 150], BLACK, "Triangle via dispatcher");
+}
+
+#[test]
+fn test_shapes_respect_canvas_boundaries() {
+    let mut buffer = new_buffer();
+
+    // Draw rectangle that would extend into title bar
+    draw_shape_rectangle(&mut buffer, 100, 10, 200, CANVAS_TOP + 50, BLACK, 1);
+
+    // Title bar should remain white
+    for y in 0..CANVAS_TOP {
+        for x in 100..=200 {
+            assert_eq!(buffer[y * WIDTH + x], WHITE, "Title bar at ({}, {}) should be white", x, y);
+        }
+    }
+
+    // Draw rectangle that would extend into bottom toolbar
+    let mut buffer = new_buffer();
+    draw_shape_rectangle(&mut buffer, 100, CANVAS_BOTTOM - 50, 200, CANVAS_BOTTOM + 50, BLACK, 1);
+
+    // Bottom toolbar should remain white
+    for y in CANVAS_BOTTOM..HEIGHT {
+        for x in 100..=200 {
+            assert_eq!(buffer[y * WIDTH + x], WHITE, "Bottom toolbar at ({}, {}) should be white", x, y);
+        }
+    }
+}

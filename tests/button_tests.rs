@@ -151,7 +151,8 @@ fn test_color_buttons_do_not_overlap_each_other() {
 #[test]
 fn test_minus_button_detection() {
     let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let size_display_x = BUTTON_MARGIN;
+    // Size display is now after 7 tool buttons
+    let size_display_x = BUTTON_MARGIN + 7 * (BUTTON_SIZE + BUTTON_MARGIN) + BUTTON_MARGIN;
     let minus_x = size_display_x + 44 + BUTTON_MARGIN;
 
     // Center of minus button
@@ -175,7 +176,8 @@ fn test_minus_button_detection() {
 #[test]
 fn test_plus_button_detection() {
     let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let size_display_x = BUTTON_MARGIN;
+    // Size display is now after 7 tool buttons
+    let size_display_x = BUTTON_MARGIN + 7 * (BUTTON_SIZE + BUTTON_MARGIN) + BUTTON_MARGIN;
     let minus_x = size_display_x + 44 + BUTTON_MARGIN;
     let plus_x = minus_x + BUTTON_SIZE + BUTTON_MARGIN;
 
@@ -198,9 +200,43 @@ fn test_plus_button_detection() {
 }
 
 #[test]
+fn test_tool_button_detection() {
+    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
+
+    // Test each tool button
+    let expected_tools = [
+        ToolMode::Brush,
+        ToolMode::Line,
+        ToolMode::Square,
+        ToolMode::Rectangle,
+        ToolMode::Circle,
+        ToolMode::Oval,
+        ToolMode::Triangle,
+    ];
+
+    for (i, &expected_tool) in expected_tools.iter().enumerate() {
+        let bx = BUTTON_MARGIN + i * (BUTTON_SIZE + BUTTON_MARGIN);
+        let center_x = bx + BUTTON_SIZE / 2;
+        let center_y = row2_y + BUTTON_SIZE / 2;
+
+        assert_eq!(
+            get_clicked_tool(center_x, center_y),
+            Some(expected_tool),
+            "Tool button {} not detected correctly",
+            i
+        );
+    }
+
+    // Test outside tool buttons area
+    assert_eq!(get_clicked_tool(0, 0), None); // Top-left corner
+    assert_eq!(get_clicked_tool(WIDTH / 2, CANVAS_TOP + 50), None); // Canvas area
+}
+
+#[test]
 fn test_row2_buttons_do_not_overlap() {
     let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let size_display_x = BUTTON_MARGIN;
+    // Size display is now after 7 tool buttons
+    let size_display_x = BUTTON_MARGIN + 7 * (BUTTON_SIZE + BUTTON_MARGIN) + BUTTON_MARGIN;
     let minus_x = size_display_x + 44 + BUTTON_MARGIN;
     let plus_x = minus_x + BUTTON_SIZE + BUTTON_MARGIN;
 

@@ -43,6 +43,19 @@ pub const MIN_BRUSH_SIZE: usize = 1;
 pub const MAX_BRUSH_SIZE: usize = 20;
 pub const DEFAULT_BRUSH_SIZE: usize = 1;
 
+/// Tool modes for drawing
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum ToolMode {
+    #[default]
+    Brush,
+    Line,
+    Square,
+    Rectangle,
+    Circle,
+    Oval,
+    Triangle,
+}
+
 /// Commands that can be sent via stdin
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
@@ -288,6 +301,8 @@ pub fn run() {
     let mut mouse_was_down = false;
     let mut selected_color_index: usize = 0;
     let mut brush_size: usize = DEFAULT_BRUSH_SIZE;
+    let mut current_tool: ToolMode = ToolMode::default();
+    let mut drag_start: Option<(usize, usize)> = None;
 
     // Start stdin reader thread for command protocol
     let stdin_rx = spawn_stdin_reader();
@@ -342,7 +357,7 @@ pub fn run() {
             }
         }
         draw_title_bar(&mut buffer);
-        draw_bottom_toolbar(&mut buffer, selected_color_index, brush_size);
+        draw_bottom_toolbar(&mut buffer, selected_color_index, brush_size, current_tool);
 
         let mouse_down = window.get_mouse_down(MouseButton::Left);
         let mouse_clicked = mouse_down && !mouse_was_down;
@@ -358,6 +373,9 @@ pub fn run() {
                 if let Some(color_index) = get_clicked_color_index_bottom(x, y) {
                     selected_color_index = color_index;
                 }
+                if let Some(tool) = get_clicked_tool(x, y) {
+                    current_tool = tool;
+                }
                 if is_in_minus_button(x, y) && brush_size > MIN_BRUSH_SIZE {
                     brush_size -= 1;
                 }
@@ -368,17 +386,48 @@ pub fn run() {
 
             let pen_color = COLOR_PALETTE[selected_color_index];
 
-            if mouse_down && x < WIDTH && (CANVAS_TOP..CANVAS_BOTTOM).contains(&y) {
-                if is_drawing {
-                    if let Some((lx, ly)) = last_pos {
-                        draw_brush_line(&mut buffer, lx, ly, x, y, pen_color, brush_size);
+            // Freehand drawing only in Brush mode
+            if current_tool == ToolMode::Brush {
+                if mouse_down && x < WIDTH && (CANVAS_TOP..CANVAS_BOTTOM).contains(&y) {
+                    if is_drawing {
+                        if let Some((lx, ly)) = last_pos {
+                            draw_brush_line(&mut buffer, lx, ly, x, y, pen_color, brush_size);
+                        }
+                    } else {
+                        draw_circle(&mut buffer, x, y, brush_size, pen_color);
                     }
+                    is_drawing = true;
+                    last_pos = Some((x, y));
                 } else {
-                    draw_circle(&mut buffer, x, y, brush_size, pen_color);
+                    is_drawing = false;
+                    last_pos = None;
                 }
-                is_drawing = true;
-                last_pos = Some((x, y));
             } else {
+                // Shape tools: click-drag to define shape bounds
+                let in_canvas = x < WIDTH && (CANVAS_TOP..CANVAS_BOTTOM).contains(&y);
+
+                if mouse_clicked && in_canvas {
+                    // Start drag
+                    drag_start = Some((x, y));
+                } else if !mouse_down && mouse_was_down {
+                    // Mouse released - draw the shape if we have a valid drag
+                    if let Some((start_x, start_y)) = drag_start {
+                        if in_canvas {
+                            draw_shape(
+                                &mut buffer,
+                                current_tool,
+                                start_x,
+                                start_y,
+                                x,
+                                y,
+                                pen_color,
+                                brush_size,
+                            );
+                        }
+                        drag_start = None;
+                    }
+                }
+
                 is_drawing = false;
                 last_pos = None;
             }
@@ -524,6 +573,7 @@ pub fn draw_bottom_toolbar(
     buffer: &mut [u32],
     selected_color_index: usize,
     brush_size: usize,
+    current_tool: ToolMode,
 ) {
     let toolbar_top = CANVAS_BOTTOM;
 
@@ -554,11 +604,35 @@ pub fn draw_bottom_toolbar(
         }
     }
 
-    // Row 2: Size display + [-] [+] buttons
+    // Row 2: Tool buttons + Size display + [-] [+] buttons
     let row2_y = toolbar_top + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
 
-    // Size display (text showing current brush size)
-    let size_display_x = BUTTON_MARGIN;
+    // Tool buttons: [Brush] [Line] [Sq] [Rect] [Circ] [Oval] [Tri]
+    let tools = [
+        ToolMode::Brush,
+        ToolMode::Line,
+        ToolMode::Square,
+        ToolMode::Rectangle,
+        ToolMode::Circle,
+        ToolMode::Oval,
+        ToolMode::Triangle,
+    ];
+
+    for (i, &tool) in tools.iter().enumerate() {
+        let bx = BUTTON_MARGIN + i * (BUTTON_SIZE + BUTTON_MARGIN);
+        draw_button(buffer, bx, row2_y, GRAY);
+        draw_tool_icon(buffer, bx, row2_y, tool);
+
+        // Highlight selected tool
+        if tool == current_tool {
+            draw_button_border(buffer, bx, row2_y, 0x4040E0); // Blue border
+        } else {
+            draw_button_border(buffer, bx, row2_y, DARK_GRAY);
+        }
+    }
+
+    // Size display (after tool buttons)
+    let size_display_x = BUTTON_MARGIN + 7 * (BUTTON_SIZE + BUTTON_MARGIN) + BUTTON_MARGIN;
     draw_size_display(buffer, size_display_x, row2_y, brush_size);
 
     // Minus button
@@ -570,6 +644,124 @@ pub fn draw_bottom_toolbar(
     let plus_x = minus_x + BUTTON_SIZE + BUTTON_MARGIN;
     draw_button(buffer, plus_x, row2_y, DARK_GRAY);
     draw_plus_icon(buffer, plus_x, row2_y);
+}
+
+/// Draw an icon representing a tool
+pub fn draw_tool_icon(buffer: &mut [u32], bx: usize, by: usize, tool: ToolMode) {
+    let padding = 5;
+    let start_x = bx + padding;
+    let end_x = bx + BUTTON_SIZE - padding;
+    let start_y = by + padding;
+    let end_y = by + BUTTON_SIZE - padding;
+    let mid_x = bx + BUTTON_SIZE / 2;
+    let mid_y = by + BUTTON_SIZE / 2;
+
+    match tool {
+        ToolMode::Brush => {
+            // Draw a small brush stroke (diagonal line with dot)
+            for i in 0..6 {
+                let x = start_x + i;
+                let y = end_y - i;
+                if x < WIDTH && y < HEIGHT {
+                    buffer[y * WIDTH + x] = BLACK;
+                    if y > 0 {
+                        buffer[(y - 1) * WIDTH + x] = BLACK;
+                    }
+                }
+            }
+        }
+        ToolMode::Line => {
+            // Diagonal line
+            for i in 0..(end_x - start_x) {
+                let x = start_x + i;
+                let y = start_y + i;
+                if x < WIDTH && y < HEIGHT {
+                    buffer[y * WIDTH + x] = BLACK;
+                }
+            }
+        }
+        ToolMode::Square => {
+            // Square outline
+            let size = end_x - start_x;
+            for i in 0..size {
+                buffer[start_y * WIDTH + start_x + i] = BLACK; // top
+                buffer[end_y * WIDTH + start_x + i] = BLACK;   // bottom
+                buffer[(start_y + i) * WIDTH + start_x] = BLACK; // left
+                buffer[(start_y + i) * WIDTH + end_x] = BLACK;   // right
+            }
+        }
+        ToolMode::Rectangle => {
+            // Rectangle (wider than tall)
+            let rect_start_y = start_y + 3;
+            let rect_end_y = end_y - 3;
+            for x in start_x..=end_x {
+                buffer[rect_start_y * WIDTH + x] = BLACK; // top
+                buffer[rect_end_y * WIDTH + x] = BLACK;   // bottom
+            }
+            for y in rect_start_y..=rect_end_y {
+                buffer[y * WIDTH + start_x] = BLACK; // left
+                buffer[y * WIDTH + end_x] = BLACK;   // right
+            }
+        }
+        ToolMode::Circle => {
+            // Simple circle approximation
+            let radius = (end_x - start_x) / 2;
+            let cx = mid_x;
+            let cy = mid_y;
+            for angle in 0..32 {
+                let theta = (angle as f64) * std::f64::consts::PI * 2.0 / 32.0;
+                let x = cx as f64 + (radius as f64) * theta.cos();
+                let y = cy as f64 + (radius as f64) * theta.sin();
+                if x >= 0.0 && (x as usize) < WIDTH && y >= 0.0 && (y as usize) < HEIGHT {
+                    buffer[(y as usize) * WIDTH + (x as usize)] = BLACK;
+                }
+            }
+        }
+        ToolMode::Oval => {
+            // Oval (ellipse - wider than tall)
+            let rx = (end_x - start_x) / 2;
+            let ry = (end_y - start_y) / 3;
+            let cx = mid_x;
+            let cy = mid_y;
+            for angle in 0..32 {
+                let theta = (angle as f64) * std::f64::consts::PI * 2.0 / 32.0;
+                let x = cx as f64 + (rx as f64) * theta.cos();
+                let y = cy as f64 + (ry as f64) * theta.sin();
+                if x >= 0.0 && (x as usize) < WIDTH && y >= 0.0 && (y as usize) < HEIGHT {
+                    buffer[(y as usize) * WIDTH + (x as usize)] = BLACK;
+                }
+            }
+        }
+        ToolMode::Triangle => {
+            // Triangle pointing up
+            let apex_x = mid_x;
+            let apex_y = start_y;
+            let left_x = start_x;
+            let right_x = end_x;
+            let base_y = end_y;
+
+            // Left edge
+            for i in 0..=(base_y - apex_y) {
+                let x = apex_x as isize - (i as isize * (apex_x - left_x) as isize / (base_y - apex_y) as isize);
+                let y = apex_y + i;
+                if x >= 0 && (x as usize) < WIDTH && y < HEIGHT {
+                    buffer[y * WIDTH + x as usize] = BLACK;
+                }
+            }
+            // Right edge
+            for i in 0..=(base_y - apex_y) {
+                let x = apex_x as isize + (i as isize * (right_x - apex_x) as isize / (base_y - apex_y) as isize);
+                let y = apex_y + i;
+                if x >= 0 && (x as usize) < WIDTH && y < HEIGHT {
+                    buffer[y * WIDTH + x as usize] = BLACK;
+                }
+            }
+            // Base
+            for x in left_x..=right_x {
+                buffer[base_y * WIDTH + x] = BLACK;
+            }
+        }
+    }
 }
 
 pub fn draw_minus_icon(buffer: &mut [u32], bx: usize, by: usize) {
@@ -747,6 +939,235 @@ pub fn draw_brush_line(
     }
 }
 
+/// Draw a shape based on the current tool mode
+/// (x1, y1) is the drag start point, (x2, y2) is the drag end point
+pub fn draw_shape(
+    buffer: &mut [u32],
+    tool: ToolMode,
+    x1: usize,
+    y1: usize,
+    x2: usize,
+    y2: usize,
+    color: u32,
+    brush_size: usize,
+) {
+    match tool {
+        ToolMode::Brush => {
+            // Brush mode doesn't use this function
+        }
+        ToolMode::Line => {
+            draw_brush_line(buffer, x1, y1, x2, y2, color, brush_size);
+        }
+        ToolMode::Square => {
+            draw_shape_square(buffer, x1, y1, x2, y2, color, brush_size);
+        }
+        ToolMode::Rectangle => {
+            draw_shape_rectangle(buffer, x1, y1, x2, y2, color, brush_size);
+        }
+        ToolMode::Circle => {
+            draw_shape_circle(buffer, x1, y1, x2, y2, color, brush_size);
+        }
+        ToolMode::Oval => {
+            draw_shape_oval(buffer, x1, y1, x2, y2, color, brush_size);
+        }
+        ToolMode::Triangle => {
+            draw_shape_triangle(buffer, x1, y1, x2, y2, color, brush_size);
+        }
+    }
+}
+
+/// Draw a square from drag start to end (side length = max of width/height)
+pub fn draw_shape_square(
+    buffer: &mut [u32],
+    x1: usize,
+    y1: usize,
+    x2: usize,
+    y2: usize,
+    color: u32,
+    brush_size: usize,
+) {
+    let dx = if x2 > x1 { x2 - x1 } else { x1 - x2 };
+    let dy = if y2 > y1 { y2 - y1 } else { y1 - y2 };
+    let side = dx.max(dy);
+
+    // Determine direction
+    let (left, top) = (
+        if x2 >= x1 { x1 } else { x1.saturating_sub(side) },
+        if y2 >= y1 { y1 } else { y1.saturating_sub(side) },
+    );
+    let right = left + side;
+    let bottom = top + side;
+
+    // Draw four sides
+    draw_brush_line(buffer, left, top, right, top, color, brush_size); // Top
+    draw_brush_line(buffer, right, top, right, bottom, color, brush_size); // Right
+    draw_brush_line(buffer, right, bottom, left, bottom, color, brush_size); // Bottom
+    draw_brush_line(buffer, left, bottom, left, top, color, brush_size); // Left
+}
+
+/// Draw a rectangle from drag start to end
+pub fn draw_shape_rectangle(
+    buffer: &mut [u32],
+    x1: usize,
+    y1: usize,
+    x2: usize,
+    y2: usize,
+    color: u32,
+    brush_size: usize,
+) {
+    let (left, right) = if x1 < x2 { (x1, x2) } else { (x2, x1) };
+    let (top, bottom) = if y1 < y2 { (y1, y2) } else { (y2, y1) };
+
+    // Draw four sides
+    draw_brush_line(buffer, left, top, right, top, color, brush_size); // Top
+    draw_brush_line(buffer, right, top, right, bottom, color, brush_size); // Right
+    draw_brush_line(buffer, right, bottom, left, bottom, color, brush_size); // Bottom
+    draw_brush_line(buffer, left, bottom, left, top, color, brush_size); // Left
+}
+
+/// Draw a circle bounded by drag start and end points (diameter, not radius)
+/// Circle fits inside the bounding box as a perfect circle (uses min dimension)
+pub fn draw_shape_circle(
+    buffer: &mut [u32],
+    x1: usize,
+    y1: usize,
+    x2: usize,
+    y2: usize,
+    color: u32,
+    brush_size: usize,
+) {
+    let (left, right) = if x1 < x2 { (x1, x2) } else { (x2, x1) };
+    let (top, bottom) = if y1 < y2 { (y1, y2) } else { (y2, y1) };
+
+    let width = right - left;
+    let height = bottom - top;
+    let diameter = width.min(height);
+    let radius = diameter as f64 / 2.0;
+
+    if radius < 1.0 {
+        draw_circle(buffer, (left + right) / 2, (top + bottom) / 2, brush_size, color);
+        return;
+    }
+
+    // Center the circle in the bounding box
+    let cx = left as f64 + diameter as f64 / 2.0;
+    let cy = top as f64 + diameter as f64 / 2.0;
+
+    // Draw circle using parametric form with brush
+    let circumference = 2.0 * std::f64::consts::PI * radius;
+    let steps = (circumference * 2.0).max(32.0) as usize;
+
+    let mut prev_x = cx + radius;
+    let mut prev_y = cy;
+
+    for i in 1..=steps {
+        let theta = (i as f64) * 2.0 * std::f64::consts::PI / (steps as f64);
+        let curr_x = cx + radius * theta.cos();
+        let curr_y = cy + radius * theta.sin();
+
+        draw_brush_line(
+            buffer,
+            prev_x as usize,
+            prev_y as usize,
+            curr_x as usize,
+            curr_y as usize,
+            color,
+            brush_size,
+        );
+
+        prev_x = curr_x;
+        prev_y = curr_y;
+    }
+}
+
+/// Draw an oval bounded by drag start and end points
+pub fn draw_shape_oval(
+    buffer: &mut [u32],
+    x1: usize,
+    y1: usize,
+    x2: usize,
+    y2: usize,
+    color: u32,
+    brush_size: usize,
+) {
+    let (left, right) = if x1 < x2 { (x1, x2) } else { (x2, x1) };
+    let (top, bottom) = if y1 < y2 { (y1, y2) } else { (y2, y1) };
+
+    let cx = (left + right) / 2;
+    let cy = (top + bottom) / 2;
+    let rx = (right - left) / 2;
+    let ry = (bottom - top) / 2;
+
+    if rx == 0 || ry == 0 {
+        draw_brush_line(buffer, x1, y1, x2, y2, color, brush_size);
+        return;
+    }
+
+    // Draw ellipse using parametric form
+    let steps = ((rx + ry) * 4).max(32);
+
+    let mut prev_x = cx as f64 + rx as f64;
+    let mut prev_y = cy as f64;
+
+    for i in 1..=steps {
+        let theta = (i as f64) * 2.0 * std::f64::consts::PI / (steps as f64);
+        let curr_x = cx as f64 + (rx as f64) * theta.cos();
+        let curr_y = cy as f64 + (ry as f64) * theta.sin();
+
+        draw_brush_line(
+            buffer,
+            prev_x as usize,
+            prev_y as usize,
+            curr_x as usize,
+            curr_y as usize,
+            color,
+            brush_size,
+        );
+
+        prev_x = curr_x;
+        prev_y = curr_y;
+    }
+}
+
+/// Draw a triangle in the bounding box from drag start to end
+/// If dragging upward: apex at top (pointing up)
+/// If dragging downward: apex at bottom (pointing down)
+pub fn draw_shape_triangle(
+    buffer: &mut [u32],
+    x1: usize,
+    y1: usize,
+    x2: usize,
+    y2: usize,
+    color: u32,
+    brush_size: usize,
+) {
+    let (left, right) = if x1 < x2 { (x1, x2) } else { (x2, x1) };
+    let (top, bottom) = if y1 < y2 { (y1, y2) } else { (y2, y1) };
+    let pointing_up = y2 < y1; // Dragging upward = triangle points up
+
+    let mid_x = (left + right) / 2;
+
+    if pointing_up {
+        // Apex at top, base at bottom (pointing up)
+        let apex_x = mid_x;
+        let apex_y = top;
+        let base_y = bottom;
+
+        draw_brush_line(buffer, apex_x, apex_y, left, base_y, color, brush_size); // Left edge
+        draw_brush_line(buffer, apex_x, apex_y, right, base_y, color, brush_size); // Right edge
+        draw_brush_line(buffer, left, base_y, right, base_y, color, brush_size); // Base
+    } else {
+        // Apex at bottom, base at top (pointing down)
+        let apex_x = mid_x;
+        let apex_y = bottom;
+        let base_y = top;
+
+        draw_brush_line(buffer, apex_x, apex_y, left, base_y, color, brush_size); // Left edge
+        draw_brush_line(buffer, apex_x, apex_y, right, base_y, color, brush_size); // Right edge
+        draw_brush_line(buffer, left, base_y, right, base_y, color, brush_size); // Base
+    }
+}
+
 pub fn get_clicked_color_index_bottom(x: usize, y: usize) -> Option<usize> {
     let row1_y = CANVAS_BOTTOM + BUTTON_MARGIN;
     if y < row1_y || y >= row1_y + BUTTON_SIZE {
@@ -761,16 +1182,42 @@ pub fn get_clicked_color_index_bottom(x: usize, y: usize) -> Option<usize> {
     None
 }
 
+/// Returns which tool button was clicked, if any
+pub fn get_clicked_tool(x: usize, y: usize) -> Option<ToolMode> {
+    let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
+    if y < row2_y || y >= row2_y + BUTTON_SIZE {
+        return None;
+    }
+
+    let tools = [
+        ToolMode::Brush,
+        ToolMode::Line,
+        ToolMode::Square,
+        ToolMode::Rectangle,
+        ToolMode::Circle,
+        ToolMode::Oval,
+        ToolMode::Triangle,
+    ];
+
+    for (i, &tool) in tools.iter().enumerate() {
+        let bx = BUTTON_MARGIN + i * (BUTTON_SIZE + BUTTON_MARGIN);
+        if x >= bx && x < bx + BUTTON_SIZE {
+            return Some(tool);
+        }
+    }
+    None
+}
+
 pub fn is_in_minus_button(x: usize, y: usize) -> bool {
     let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let size_display_x = BUTTON_MARGIN;
+    let size_display_x = BUTTON_MARGIN + 7 * (BUTTON_SIZE + BUTTON_MARGIN) + BUTTON_MARGIN;
     let minus_x = size_display_x + 44 + BUTTON_MARGIN;
     x >= minus_x && x < minus_x + BUTTON_SIZE && y >= row2_y && y < row2_y + BUTTON_SIZE
 }
 
 pub fn is_in_plus_button(x: usize, y: usize) -> bool {
     let row2_y = CANVAS_BOTTOM + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
-    let size_display_x = BUTTON_MARGIN;
+    let size_display_x = BUTTON_MARGIN + 7 * (BUTTON_SIZE + BUTTON_MARGIN) + BUTTON_MARGIN;
     let minus_x = size_display_x + 44 + BUTTON_MARGIN;
     let plus_x = minus_x + BUTTON_SIZE + BUTTON_MARGIN;
     x >= plus_x && x < plus_x + BUTTON_SIZE && y >= row2_y && y < row2_y + BUTTON_SIZE
