@@ -150,27 +150,7 @@ oval x,y rx,ry        -> draw oval at center with x/y radii
 triangle x1,y1 x2,y2  -> draw triangle in bounding box
 ```
 
-## Roadmap
+## Related Documentation
 
-### Version 0.1
-- ✅ 13-color palette
-- ✅ Brush sizes 1-20
-- ✅ Eraser tool
-- ✅ Command protocol (stdin + Unix socket)
-- ✅ PNG snapshot export
-
-### Version 0.2 (Current)
-- ✅ 14-color palette (Black, White + 12 colors)
-- ✅ Edge/fill color system with transparent option
-- ✅ Shape tools (line, square, rectangle, circle, oval, triangle)
-- ✅ Shape socket commands
-- ✅ Clear canvas button
-
-### Version 0.3 (Planned)
-- Undo/redo functionality
-- Polygon support
-- Collaboration features (multi-user drawing)
-- Layer support
-
-### Version 0.4 (Planned)
-- Enhanced AI interaction (autonomous drawing, image understanding)
+- **[VERSIONS.md](VERSIONS.md)** - Version history and release notes
+- **[PLANNING.md](PLANNING.md)** - Future feature plans and roadmap
