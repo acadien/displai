@@ -89,7 +89,7 @@ Before any code changes can be committed:
 
 **displai** is a whiteboard-style drawing application built with Rust and minifb, featuring AI interaction via Claude through a Unix socket interface.
 
-### Current Implementation (v0.1)
+### Current Implementation (v0.2)
 
 - `src/lib.rs` - Core logic, all public functions and constants
 - `src/main.rs` - Entry point, calls `displai::run()`
@@ -105,8 +105,8 @@ Before any code changes can be committed:
 - **Title bar**: Gray bar at top with close button
 - **Close button (X)**: Red button in top-right corner, exits application
 - **Bottom toolbar**: Two rows containing:
-  - Row 1: 13 color palette buttons
-  - Row 2: Eraser button, brush size display, +/- size buttons
+  - Row 1: 14 color palette buttons + transparent button + edge/fill indicator
+  - Row 2: 7 tool buttons (Brush, Line, Square, Rect, Circle, Oval, Triangle) + size display + [-][+] buttons + clear button
 
 ### Rendering Pattern
 
@@ -148,9 +148,25 @@ rect x1,y1 x2,y2      -> draw rectangle with corners at points
 circle x,y r          -> draw circle at center with radius
 oval x,y rx,ry        -> draw oval at center with x/y radii
 triangle x1,y1 x2,y2  -> draw triangle in bounding box
+
+# Batch commands (for efficient multi-point drawing)
+polyline x,y x,y ...  -> draw connected line segments
+points x,y x,y ...    -> draw multiple dots
+
+# Per-point attributes (for polyline/points)
+x,y                   -> use current edge color and brush size
+x,y:color             -> override color (0-13)
+x,y:color:size        -> override both color and size
 ```
+
+### Key Types (in lib.rs)
+
+- `ToolMode` - Enum for drawing tools: Brush, Line, Square, Rectangle, Circle, Oval, Triangle
+- `AttributedPoint` - Point with optional color/size overrides for batch commands
+- `Command` - Enum representing all socket commands
 
 ## Related Documentation
 
 - **[VERSIONS.md](VERSIONS.md)** - Version history and release notes
 - **[PLANNING.md](PLANNING.md)** - Future feature plans and roadmap
+- **[ARTIST.md](ARTIST.md)** - Guidelines for AI agents using the drawing interface

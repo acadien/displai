@@ -56,13 +56,22 @@ pub enum ToolMode {
     Triangle,
 }
 
+/// A point with optional color and size overrides
+#[derive(Debug, Clone, PartialEq)]
+pub struct AttributedPoint {
+    pub x: usize,
+    pub y: usize,
+    pub color: Option<usize>, // None = use current edge color
+    pub size: Option<usize>,  // None = use current brush size
+}
+
 /// Commands that can be sent via stdin
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Snapshot,
-    Color(usize),         // Legacy: sets edge color
-    Edge(Option<usize>),  // Set edge color (None = transparent)
-    Fill(Option<usize>),  // Set fill color (None = transparent)
+    Color(usize),        // Legacy: sets edge color
+    Edge(Option<usize>), // Set edge color (None = transparent)
+    Fill(Option<usize>), // Set fill color (None = transparent)
     Size(usize),
     Stroke {
         x1: usize,
@@ -111,6 +120,53 @@ pub enum Command {
         x2: usize,
         y2: usize,
     },
+    // Batch commands for performance (with optional per-point color/size attributes)
+    Polyline(Vec<AttributedPoint>), // Connected line segments
+    Points(Vec<AttributedPoint>),   // Multiple dots
+}
+
+/// Parse a point with optional color and size attributes
+/// Format: x,y or x,y:color or x,y:color:size
+pub fn parse_attributed_point(s: &str) -> Option<AttributedPoint> {
+    // Split on colon first to separate coords from attributes
+    let parts: Vec<&str> = s.split(':').collect();
+
+    // Parse x,y from first part
+    let coords: Vec<&str> = parts[0].split(',').collect();
+    if coords.len() != 2 {
+        return None;
+    }
+    let x = coords[0].parse().ok()?;
+    let y = coords[1].parse().ok()?;
+
+    // Parse optional color from second part
+    let color = if parts.len() >= 2 {
+        let c = parts[1].parse::<usize>().ok()?;
+        if c < COLOR_PALETTE.len() {
+            Some(c)
+        } else {
+            return None; // Invalid color index
+        }
+    } else {
+        None
+    };
+
+    // Parse optional size from third part
+    let size = if parts.len() >= 3 {
+        let s = parts[2].parse::<usize>().ok()?;
+        Some(s.clamp(MIN_BRUSH_SIZE, MAX_BRUSH_SIZE))
+    } else {
+        None
+    };
+
+    Some(AttributedPoint { x, y, color, size })
+}
+
+/// Parse a space-separated list of attributed points
+fn parse_attributed_list(args: &str) -> Option<Vec<AttributedPoint>> {
+    args.split_whitespace()
+        .map(parse_attributed_point)
+        .collect()
 }
 
 /// Parse a command string into a Command enum
@@ -315,6 +371,34 @@ pub fn parse_command(input: &str) -> Option<Command> {
                 None
             }
         }
+        "polyline" => {
+            // polyline x1,y1[:c[:s]] x2,y2[:c[:s]] x3,y3[:c[:s]] ...
+            if parts.len() >= 3 {
+                let args = parts[1..].join(" ");
+                let points = parse_attributed_list(&args)?;
+                if points.len() >= 2 {
+                    Some(Command::Polyline(points))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        "points" => {
+            // points x1,y1[:c[:s]] x2,y2[:c[:s]] x3,y3[:c[:s]] ...
+            if parts.len() >= 2 {
+                let args = parts[1..].join(" ");
+                let points = parse_attributed_list(&args)?;
+                if !points.is_empty() {
+                    Some(Command::Points(points))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
         _ => None,
     }
 }
@@ -381,9 +465,7 @@ pub fn execute_command(
             };
             Some(format!(
                 "edge:{} fill:{} size:{}",
-                edge_str,
-                fill_str,
-                *brush_size
+                edge_str, fill_str, *brush_size
             ))
         }
         Command::Line { x1, y1, x2, y2 } => {
@@ -392,7 +474,10 @@ pub fn execute_command(
             draw_shape_with_fill(
                 buffer,
                 ToolMode::Line,
-                *x1, *y1, *x2, *y2,
+                *x1,
+                *y1,
+                *x2,
+                *y2,
                 edge_color,
                 fill_color,
                 *brush_size,
@@ -408,7 +493,10 @@ pub fn execute_command(
             draw_shape_with_fill(
                 buffer,
                 ToolMode::Square,
-                *x, *y, x2, y2,
+                *x,
+                *y,
+                x2,
+                y2,
                 edge_color,
                 fill_color,
                 *brush_size,
@@ -421,7 +509,10 @@ pub fn execute_command(
             draw_shape_with_fill(
                 buffer,
                 ToolMode::Rectangle,
-                *x1, *y1, *x2, *y2,
+                *x1,
+                *y1,
+                *x2,
+                *y2,
                 edge_color,
                 fill_color,
                 *brush_size,
@@ -439,7 +530,10 @@ pub fn execute_command(
             draw_shape_with_fill(
                 buffer,
                 ToolMode::Circle,
-                x1, y1, x2, y2,
+                x1,
+                y1,
+                x2,
+                y2,
                 edge_color,
                 fill_color,
                 *brush_size,
@@ -457,7 +551,10 @@ pub fn execute_command(
             draw_shape_with_fill(
                 buffer,
                 ToolMode::Oval,
-                x1, y1, x2, y2,
+                x1,
+                y1,
+                x2,
+                y2,
                 edge_color,
                 fill_color,
                 *brush_size,
@@ -470,11 +567,45 @@ pub fn execute_command(
             draw_shape_with_fill(
                 buffer,
                 ToolMode::Triangle,
-                *x1, *y1, *x2, *y2,
+                *x1,
+                *y1,
+                *x2,
+                *y2,
                 edge_color,
                 fill_color,
                 *brush_size,
             );
+            None
+        }
+        Command::Polyline(points) => {
+            for window in points.windows(2) {
+                // Use the END point's attributes for this segment
+                let color_idx = window[1].color.or(*edge_color_index);
+                if let Some(idx) = color_idx {
+                    let color = COLOR_PALETTE[idx];
+                    let size = window[1].size.unwrap_or(*brush_size);
+                    draw_brush_line(
+                        buffer,
+                        window[0].x,
+                        window[0].y,
+                        window[1].x,
+                        window[1].y,
+                        color,
+                        size,
+                    );
+                }
+            }
+            None
+        }
+        Command::Points(points) => {
+            for pt in points {
+                let color_idx = pt.color.or(*edge_color_index);
+                if let Some(idx) = color_idx {
+                    let color = COLOR_PALETTE[idx];
+                    let size = pt.size.unwrap_or(*brush_size);
+                    draw_circle(buffer, pt.x, pt.y, size, color);
+                }
+            }
             None
         }
     }
@@ -530,13 +661,14 @@ fn spawn_stdin_reader() -> Receiver<String> {
 
 pub const SOCKET_PATH: &str = "/tmp/displai.sock";
 
-/// A command received from the socket, with the stream to write the response back to
+/// A command received from the socket, with an optional stream to write the response back to
 struct SocketCommand {
     line: String,
-    stream: UnixStream,
+    stream: Option<UnixStream>, // Only first command per connection gets response
 }
 
 /// Spawn a thread that listens on a Unix socket and sends received commands to the receiver
+/// Supports multi-line mode: all lines in a connection are processed, but only the first gets a response
 fn spawn_unix_socket_listener() -> Receiver<SocketCommand> {
     let (tx, rx) = mpsc::channel();
 
@@ -552,17 +684,15 @@ fn spawn_unix_socket_listener() -> Receiver<SocketCommand> {
                     let mut stream_for_response = stream.try_clone().ok();
                     let reader = io::BufReader::new(stream);
                     for line in reader.lines().map_while(Result::ok) {
-                        if let Some(response_stream) = stream_for_response.take() {
-                            if tx
-                                .send(SocketCommand {
-                                    line,
-                                    stream: response_stream,
-                                })
-                                .is_err()
-                            {
-                                return;
-                            }
-                            // Only handle first line per connection for request/response pattern
+                        // First command gets the response stream, subsequent commands get None
+                        let response_stream = stream_for_response.take();
+                        if tx
+                            .send(SocketCommand {
+                                line,
+                                stream: response_stream,
+                            })
+                            .is_err()
+                        {
                             return;
                         }
                     }
@@ -624,7 +754,6 @@ pub fn run() {
         loop {
             match socket_rx.try_recv() {
                 Ok(socket_cmd) => {
-                    let mut stream = socket_cmd.stream;
                     if let Some(cmd) = parse_command(&socket_cmd.line) {
                         let response = execute_command(
                             &cmd,
@@ -633,12 +762,15 @@ pub fn run() {
                             &mut fill_color_index,
                             &mut brush_size,
                         );
-                        if let Some(resp) = response {
-                            let _ = writeln!(stream, "{}", resp);
-                        } else {
-                            let _ = writeln!(stream, "ok");
+                        // Only send response if we have a stream (first command per connection)
+                        if let Some(mut stream) = socket_cmd.stream {
+                            if let Some(resp) = response {
+                                let _ = writeln!(stream, "{}", resp);
+                            } else {
+                                let _ = writeln!(stream, "ok");
+                            }
                         }
-                    } else {
+                    } else if let Some(mut stream) = socket_cmd.stream {
                         let _ = writeln!(stream, "error: unknown command");
                     }
                 }
@@ -647,7 +779,13 @@ pub fn run() {
             }
         }
         draw_title_bar(&mut buffer);
-        draw_bottom_toolbar(&mut buffer, edge_color_index, fill_color_index, brush_size, current_tool);
+        draw_bottom_toolbar(
+            &mut buffer,
+            edge_color_index,
+            fill_color_index,
+            brush_size,
+            current_tool,
+        );
 
         let mouse_down = window.get_mouse_down(MouseButton::Left);
         let right_mouse_down = window.get_mouse_down(MouseButton::Right);
@@ -826,7 +964,13 @@ pub fn draw_button_inner_border(buffer: &mut [u32], bx: usize, by: usize, color:
 }
 
 /// Draw the transparent color button with checkerboard pattern
-pub fn draw_transparent_button(buffer: &mut [u32], bx: usize, by: usize, edge_selected: bool, fill_selected: bool) {
+pub fn draw_transparent_button(
+    buffer: &mut [u32],
+    bx: usize,
+    by: usize,
+    edge_selected: bool,
+    fill_selected: bool,
+) {
     // Draw checkerboard pattern
     for dy in 0..BUTTON_SIZE {
         for dx in 0..BUTTON_SIZE {
@@ -927,7 +1071,11 @@ pub fn draw_edge_fill_indicator(
             }
         }
         // Border for edge square
-        let border_color = if edge_color == WHITE { DARK_GRAY } else { WHITE };
+        let border_color = if edge_color == WHITE {
+            DARK_GRAY
+        } else {
+            WHITE
+        };
         for dx in 0..size {
             buffer[y * WIDTH + x + dx] = border_color;
             buffer[(y + size - 1) * WIDTH + x + dx] = border_color;
@@ -1105,11 +1253,23 @@ pub fn draw_bottom_toolbar(
 
     // Transparent button (after 14 color buttons)
     let transparent_x = BUTTON_MARGIN + 14 * (BUTTON_SIZE + BUTTON_MARGIN);
-    draw_transparent_button(buffer, transparent_x, row1_y, edge_color_index.is_none(), fill_color_index.is_none());
+    draw_transparent_button(
+        buffer,
+        transparent_x,
+        row1_y,
+        edge_color_index.is_none(),
+        fill_color_index.is_none(),
+    );
 
     // Edge/Fill indicator (after transparent button)
     let indicator_x = transparent_x + BUTTON_SIZE + BUTTON_MARGIN * 2;
-    draw_edge_fill_indicator(buffer, indicator_x, row1_y, edge_color_index, fill_color_index);
+    draw_edge_fill_indicator(
+        buffer,
+        indicator_x,
+        row1_y,
+        edge_color_index,
+        fill_color_index,
+    );
 
     // Row 2: Tool buttons + Size display + [-] [+] buttons
     let row2_y = toolbar_top + TOOLBAR_ROW_HEIGHT + BUTTON_MARGIN;
@@ -1197,9 +1357,9 @@ pub fn draw_tool_icon(buffer: &mut [u32], bx: usize, by: usize, tool: ToolMode) 
             let size = end_x - start_x;
             for i in 0..size {
                 buffer[start_y * WIDTH + start_x + i] = BLACK; // top
-                buffer[end_y * WIDTH + start_x + i] = BLACK;   // bottom
+                buffer[end_y * WIDTH + start_x + i] = BLACK; // bottom
                 buffer[(start_y + i) * WIDTH + start_x] = BLACK; // left
-                buffer[(start_y + i) * WIDTH + end_x] = BLACK;   // right
+                buffer[(start_y + i) * WIDTH + end_x] = BLACK; // right
             }
         }
         ToolMode::Rectangle => {
@@ -1208,11 +1368,11 @@ pub fn draw_tool_icon(buffer: &mut [u32], bx: usize, by: usize, tool: ToolMode) 
             let rect_end_y = end_y - 3;
             for x in start_x..=end_x {
                 buffer[rect_start_y * WIDTH + x] = BLACK; // top
-                buffer[rect_end_y * WIDTH + x] = BLACK;   // bottom
+                buffer[rect_end_y * WIDTH + x] = BLACK; // bottom
             }
             for y in rect_start_y..=rect_end_y {
                 buffer[y * WIDTH + start_x] = BLACK; // left
-                buffer[y * WIDTH + end_x] = BLACK;   // right
+                buffer[y * WIDTH + end_x] = BLACK; // right
             }
         }
         ToolMode::Circle => {
@@ -1254,7 +1414,8 @@ pub fn draw_tool_icon(buffer: &mut [u32], bx: usize, by: usize, tool: ToolMode) 
 
             // Left edge
             for i in 0..=(base_y - apex_y) {
-                let x = apex_x as isize - (i as isize * (apex_x - left_x) as isize / (base_y - apex_y) as isize);
+                let x = apex_x as isize
+                    - (i as isize * (apex_x - left_x) as isize / (base_y - apex_y) as isize);
                 let y = apex_y + i;
                 if x >= 0 && (x as usize) < WIDTH && y < HEIGHT {
                     buffer[y * WIDTH + x as usize] = BLACK;
@@ -1262,7 +1423,8 @@ pub fn draw_tool_icon(buffer: &mut [u32], bx: usize, by: usize, tool: ToolMode) 
             }
             // Right edge
             for i in 0..=(base_y - apex_y) {
-                let x = apex_x as isize + (i as isize * (right_x - apex_x) as isize / (base_y - apex_y) as isize);
+                let x = apex_x as isize
+                    + (i as isize * (right_x - apex_x) as isize / (base_y - apex_y) as isize);
                 let y = apex_y + i;
                 if x >= 0 && (x as usize) < WIDTH && y < HEIGHT {
                     buffer[y * WIDTH + x as usize] = BLACK;
@@ -1750,7 +1912,13 @@ pub fn draw_shape_circle(
     let radius = diameter as f64 / 2.0;
 
     if radius < 1.0 {
-        draw_circle(buffer, (left + right) / 2, (top + bottom) / 2, brush_size, color);
+        draw_circle(
+            buffer,
+            (left + right) / 2,
+            (top + bottom) / 2,
+            brush_size,
+            color,
+        );
         return;
     }
 
@@ -1860,7 +2028,8 @@ pub fn draw_shape_triangle(
 
         draw_brush_line(buffer, apex_x, apex_y, left, base_y, color, brush_size); // Left edge
         draw_brush_line(buffer, apex_x, apex_y, right, base_y, color, brush_size); // Right edge
-        draw_brush_line(buffer, left, base_y, right, base_y, color, brush_size); // Base
+        draw_brush_line(buffer, left, base_y, right, base_y, color, brush_size);
+    // Base
     } else {
         // Apex at bottom, base at top (pointing down)
         let apex_x = mid_x;
@@ -1869,7 +2038,8 @@ pub fn draw_shape_triangle(
 
         draw_brush_line(buffer, apex_x, apex_y, left, base_y, color, brush_size); // Left edge
         draw_brush_line(buffer, apex_x, apex_y, right, base_y, color, brush_size); // Right edge
-        draw_brush_line(buffer, left, base_y, right, base_y, color, brush_size); // Base
+        draw_brush_line(buffer, left, base_y, right, base_y, color, brush_size);
+        // Base
     }
 }
 

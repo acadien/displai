@@ -1,6 +1,27 @@
 # Version History
 
-## Version 0.2 (Current)
+## Version 0.2.1 (Current)
+
+Released: February 2026
+
+### Features
+- **Batch drawing commands** - `polyline` and `points` for efficient multi-point drawing
+- **Per-point attributes** - Override color and size for individual points: `x,y[:color[:size]]`
+- **AttributedPoint struct** - Internal representation for points with optional color/size overrides
+
+### New Socket Commands
+- `polyline x1,y1 x2,y2 [x3,y3 ...]` - Draw connected line segments
+- `points x1,y1 [x2,y2 ...]` - Draw multiple dots at specified positions
+
+### Per-Point Attribute Syntax
+Each point can optionally specify color and size overrides:
+- `100,200` - Use current edge color and brush size
+- `100,200:5` - Use color index 5, current brush size
+- `100,200:5:3` - Use color index 5, brush size 3
+
+---
+
+## Version 0.2
 
 Released: February 2026
 

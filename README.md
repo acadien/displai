@@ -26,7 +26,7 @@ displai listens on a Unix socket at `/tmp/displai.sock`. Any agent (or script) c
 
 ```bash
 echo "state" | nc -U /tmp/displai.sock
-# → color:0 eraser:off size:1
+# → edge:0 fill:none size:1
 
 echo "stroke 100,100 300,200" | nc -U /tmp/displai.sock
 echo "snapshot" | nc -U /tmp/displai.sock
@@ -38,13 +38,44 @@ echo "snapshot" | nc -U /tmp/displai.sock
 | Command | Description |
 |---|---|
 | `snapshot` | Save canvas to `canvas.png` |
-| `color <0-12>` | Select color from palette |
-| `eraser on\|off` | Toggle eraser |
-| `size <1-20>` | Set brush size |
-| `stroke x1,y1 x2,y2` | Draw line between points |
-| `dot x,y` | Draw single dot |
+| `state` | Get current edge color, fill color, and size |
 | `clear` | Clear canvas to white |
-| `state` | Get current color, eraser, and size |
+
+**Color & Brush:**
+
+| Command | Description |
+|---|---|
+| `color <0-13>` | Set edge color (legacy, same as `edge`) |
+| `edge <0-13\|none>` | Set edge/stroke color (`none` = transparent) |
+| `fill <0-13\|none>` | Set fill color (`none` = no fill) |
+| `size <1-20>` | Set brush size |
+
+**Drawing:**
+
+| Command | Description |
+|---|---|
+| `dot x,y` | Draw single dot at position |
+| `stroke x1,y1 x2,y2` | Draw brush stroke between points |
+| `points x,y [x,y ...]` | Draw multiple dots |
+| `polyline x,y x,y [x,y ...]` | Draw connected line segments |
+
+**Shapes** (use current edge/fill colors):
+
+| Command | Description |
+|---|---|
+| `line x1,y1 x2,y2` | Draw line between two points |
+| `square x,y size` | Draw square at top-left corner |
+| `rect x1,y1 x2,y2` | Draw rectangle with corners at points |
+| `circle x,y r` | Draw circle at center with radius |
+| `oval x,y rx,ry` | Draw oval at center with x/y radii |
+| `triangle x1,y1 x2,y2` | Draw triangle in bounding box |
+
+**Per-point attributes:**
+
+For `points` and `polyline`, you can specify color and size per point:
+- `x,y` - use current edge color and brush size
+- `x,y:color` - override color (0-13)
+- `x,y:color:size` - override both color and size
 
 ### Use with Claude Code
 

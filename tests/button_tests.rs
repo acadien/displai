@@ -324,7 +324,10 @@ fn test_transparent_button_detection() {
     // Just outside
     assert!(!is_in_transparent_button(transparent_x - 1, row1_y));
     assert!(!is_in_transparent_button(transparent_x, row1_y - 1));
-    assert!(!is_in_transparent_button(transparent_x, row1_y + BUTTON_SIZE));
+    assert!(!is_in_transparent_button(
+        transparent_x,
+        row1_y + BUTTON_SIZE
+    ));
 }
 
 #[test]

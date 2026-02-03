@@ -589,9 +589,17 @@ fn test_execute_rect_command() {
     // Verify top edge
     assert_eq!(buffer[y1 * WIDTH + 150], BLACK, "Top edge should be black");
     // Verify left edge
-    assert_eq!(buffer[(y1 + 50) * WIDTH + x1], BLACK, "Left edge should be black");
+    assert_eq!(
+        buffer[(y1 + 50) * WIDTH + x1],
+        BLACK,
+        "Left edge should be black"
+    );
     // Interior should still be white (no fill)
-    assert_eq!(buffer[(y1 + 50) * WIDTH + 150], WHITE, "Interior should be white");
+    assert_eq!(
+        buffer[(y1 + 50) * WIDTH + 150],
+        WHITE,
+        "Interior should be white"
+    );
 }
 
 #[test]
@@ -634,7 +642,11 @@ fn test_execute_square_command() {
     let sq_size = 50;
 
     execute_command(
-        &Command::Square { x, y, size: sq_size },
+        &Command::Square {
+            x,
+            y,
+            size: sq_size,
+        },
         &mut buffer,
         &mut edge_color_index,
         &mut fill_color_index,
@@ -644,7 +656,11 @@ fn test_execute_square_command() {
     // Verify corners are drawn
     assert_eq!(buffer[y * WIDTH + x], BLACK, "Top-left corner");
     assert_eq!(buffer[y * WIDTH + (x + sq_size)], BLACK, "Top-right corner");
-    assert_eq!(buffer[(y + sq_size) * WIDTH + x], BLACK, "Bottom-left corner");
+    assert_eq!(
+        buffer[(y + sq_size) * WIDTH + x],
+        BLACK,
+        "Bottom-left corner"
+    );
 }
 
 #[test]
@@ -669,7 +685,11 @@ fn test_execute_circle_command() {
     // Center should still be white (no fill)
     assert_eq!(buffer[cy * WIDTH + cx], WHITE, "Center should be white");
     // Top of circle should be black
-    assert_eq!(buffer[(cy - r) * WIDTH + cx], BLACK, "Top of circle should be black");
+    assert_eq!(
+        buffer[(cy - r) * WIDTH + cx],
+        BLACK,
+        "Top of circle should be black"
+    );
 }
 
 #[test]
@@ -685,7 +705,12 @@ fn test_execute_oval_command() {
     let ry = 30;
 
     execute_command(
-        &Command::Oval { x: cx, y: cy, rx, ry },
+        &Command::Oval {
+            x: cx,
+            y: cy,
+            rx,
+            ry,
+        },
         &mut buffer,
         &mut edge_color_index,
         &mut fill_color_index,
@@ -756,6 +781,220 @@ fn test_clear_canvas_only_affects_canvas_area() {
 }
 
 // ===================
+// Polyline and Points Command Tests
+// ===================
+
+#[test]
+fn test_parse_polyline() {
+    let cmd = parse_command("polyline 10,20 30,40 50,60");
+    match cmd {
+        Some(Command::Polyline(points)) => {
+            assert_eq!(points.len(), 3);
+            assert_eq!(points[0].x, 10);
+            assert_eq!(points[0].y, 20);
+            assert_eq!(points[0].color, None);
+            assert_eq!(points[0].size, None);
+            assert_eq!(points[1].x, 30);
+            assert_eq!(points[1].y, 40);
+            assert_eq!(points[2].x, 50);
+            assert_eq!(points[2].y, 60);
+        }
+        _ => panic!("Expected Polyline command"),
+    }
+}
+
+#[test]
+fn test_parse_polyline_minimum_points() {
+    // Polyline requires at least 2 points
+    let cmd = parse_command("polyline 10,20 30,40");
+    assert!(matches!(cmd, Some(Command::Polyline(points)) if points.len() == 2));
+
+    // Single point should fail
+    assert_eq!(parse_command("polyline 10,20"), None);
+
+    // No points should fail
+    assert_eq!(parse_command("polyline"), None);
+}
+
+#[test]
+fn test_parse_polyline_invalid() {
+    assert_eq!(parse_command("polyline abc,def 30,40"), None);
+    assert_eq!(parse_command("polyline 10,20 abc,def"), None);
+}
+
+#[test]
+fn test_parse_points() {
+    let cmd = parse_command("points 10,20 30,40");
+    match cmd {
+        Some(Command::Points(points)) => {
+            assert_eq!(points.len(), 2);
+            assert_eq!(points[0].x, 10);
+            assert_eq!(points[0].y, 20);
+            assert_eq!(points[0].color, None);
+            assert_eq!(points[0].size, None);
+            assert_eq!(points[1].x, 30);
+            assert_eq!(points[1].y, 40);
+        }
+        _ => panic!("Expected Points command"),
+    }
+}
+
+#[test]
+fn test_parse_points_single() {
+    // Points should work with a single point
+    let cmd = parse_command("points 100,200");
+    assert!(matches!(cmd, Some(Command::Points(points)) if points.len() == 1));
+}
+
+#[test]
+fn test_parse_points_invalid() {
+    assert_eq!(parse_command("points"), None);
+    assert_eq!(parse_command("points abc,def"), None);
+}
+
+#[test]
+fn test_execute_polyline_command() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(2); // Red
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1;
+
+    let y = CANVAS_TOP + 100;
+    // Draw a horizontal polyline
+    let cmd = Command::Polyline(vec![
+        AttributedPoint { x: 100, y, color: None, size: None },
+        AttributedPoint { x: 150, y, color: None, size: None },
+        AttributedPoint { x: 200, y, color: None, size: None },
+    ]);
+    execute_command(
+        &cmd,
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Verify pixels along the path are red
+    for x in 100..=200 {
+        assert_eq!(
+            buffer[y * WIDTH + x],
+            COLOR_PALETTE[2],
+            "Pixel at x={} should be red",
+            x
+        );
+    }
+}
+
+#[test]
+fn test_execute_polyline_with_transparent_edge() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = None; // Transparent
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1;
+
+    let y = CANVAS_TOP + 100;
+    let original = buffer[y * WIDTH + 150];
+
+    let cmd = Command::Polyline(vec![
+        AttributedPoint { x: 100, y, color: None, size: None },
+        AttributedPoint { x: 200, y, color: None, size: None },
+    ]);
+    execute_command(
+        &cmd,
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Buffer should be unchanged with transparent edge
+    assert_eq!(buffer[y * WIDTH + 150], original);
+}
+
+#[test]
+fn test_execute_points_command() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0); // Black
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1;
+
+    let y = CANVAS_TOP + 100;
+    let cmd = Command::Points(vec![
+        AttributedPoint { x: 100, y, color: None, size: None },
+        AttributedPoint { x: 150, y, color: None, size: None },
+        AttributedPoint { x: 200, y, color: None, size: None },
+    ]);
+    execute_command(
+        &cmd,
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Verify each point is drawn
+    assert_eq!(buffer[y * WIDTH + 100], BLACK, "Point at 100");
+    assert_eq!(buffer[y * WIDTH + 150], BLACK, "Point at 150");
+    assert_eq!(buffer[y * WIDTH + 200], BLACK, "Point at 200");
+
+    // Points between should still be white (not connected)
+    assert_eq!(buffer[y * WIDTH + 125], WHITE, "Gap at 125");
+}
+
+#[test]
+fn test_execute_points_with_transparent_edge() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = None; // Transparent
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1;
+
+    let y = CANVAS_TOP + 100;
+    let original = buffer[y * WIDTH + 100];
+
+    let cmd = Command::Points(vec![
+        AttributedPoint { x: 100, y, color: None, size: None },
+        AttributedPoint { x: 150, y, color: None, size: None },
+    ]);
+    execute_command(
+        &cmd,
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Buffer should be unchanged with transparent edge
+    assert_eq!(buffer[y * WIDTH + 100], original);
+}
+
+#[test]
+fn test_execute_points_with_brush_size() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0); // Black
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 5; // Larger brush
+
+    let x = 200;
+    let y = CANVAS_TOP + 100;
+    let cmd = Command::Points(vec![
+        AttributedPoint { x, y, color: None, size: None },
+    ]);
+    execute_command(
+        &cmd,
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Center should be black
+    assert_eq!(buffer[y * WIDTH + x], BLACK);
+    // Nearby pixels should also be black due to brush size
+    assert_eq!(buffer[y * WIDTH + (x + 2)], BLACK);
+    assert_eq!(buffer[(y + 2) * WIDTH + x], BLACK);
+}
+
+// ===================
 // PNG Export Tests
 // ===================
 
@@ -819,4 +1058,244 @@ fn test_save_canvas_png_pixel_colors() {
 
     // Clean up
     std::fs::remove_file(path).ok();
+}
+
+// ===================
+// Attributed Point Parsing Tests
+// ===================
+
+#[test]
+fn test_parse_attributed_point_xy_only() {
+    let pt = parse_attributed_point("100,200");
+    assert!(pt.is_some());
+    let pt = pt.unwrap();
+    assert_eq!(pt.x, 100);
+    assert_eq!(pt.y, 200);
+    assert_eq!(pt.color, None);
+    assert_eq!(pt.size, None);
+}
+
+#[test]
+fn test_parse_attributed_point_with_color() {
+    let pt = parse_attributed_point("100,200:5");
+    assert!(pt.is_some());
+    let pt = pt.unwrap();
+    assert_eq!(pt.x, 100);
+    assert_eq!(pt.y, 200);
+    assert_eq!(pt.color, Some(5));
+    assert_eq!(pt.size, None);
+}
+
+#[test]
+fn test_parse_attributed_point_with_color_and_size() {
+    let pt = parse_attributed_point("100,200:5:3");
+    assert!(pt.is_some());
+    let pt = pt.unwrap();
+    assert_eq!(pt.x, 100);
+    assert_eq!(pt.y, 200);
+    assert_eq!(pt.color, Some(5));
+    assert_eq!(pt.size, Some(3));
+}
+
+#[test]
+fn test_parse_attributed_point_invalid_color() {
+    // Color index 99 is out of range (0-13)
+    let pt = parse_attributed_point("100,200:99");
+    assert!(pt.is_none());
+
+    // Color index 14 is out of range
+    let pt = parse_attributed_point("100,200:14");
+    assert!(pt.is_none());
+}
+
+#[test]
+fn test_parse_attributed_point_size_clamped() {
+    // Size should be clamped to MIN_BRUSH_SIZE..=MAX_BRUSH_SIZE (1-20)
+    let pt = parse_attributed_point("100,200:0:0");
+    assert!(pt.is_some());
+    let pt = pt.unwrap();
+    assert_eq!(pt.size, Some(1)); // Clamped to minimum
+
+    let pt = parse_attributed_point("100,200:0:100");
+    assert!(pt.is_some());
+    let pt = pt.unwrap();
+    assert_eq!(pt.size, Some(20)); // Clamped to maximum
+}
+
+#[test]
+fn test_parse_polyline_with_attributes() {
+    let cmd = parse_command("polyline 100,50:2 200,100:5 300,150:0");
+    match cmd {
+        Some(Command::Polyline(points)) => {
+            assert_eq!(points.len(), 3);
+            assert_eq!(points[0].x, 100);
+            assert_eq!(points[0].y, 50);
+            assert_eq!(points[0].color, Some(2));
+            assert_eq!(points[1].color, Some(5));
+            assert_eq!(points[2].color, Some(0));
+        }
+        _ => panic!("Expected Polyline command"),
+    }
+}
+
+#[test]
+fn test_parse_polyline_with_color_and_size() {
+    let cmd = parse_command("polyline 100,50:2:5 200,100:5:3 300,150:0:1");
+    match cmd {
+        Some(Command::Polyline(points)) => {
+            assert_eq!(points.len(), 3);
+            assert_eq!(points[0].color, Some(2));
+            assert_eq!(points[0].size, Some(5));
+            assert_eq!(points[1].color, Some(5));
+            assert_eq!(points[1].size, Some(3));
+            assert_eq!(points[2].color, Some(0));
+            assert_eq!(points[2].size, Some(1));
+        }
+        _ => panic!("Expected Polyline command"),
+    }
+}
+
+#[test]
+fn test_parse_points_mixed_attributes() {
+    // Mixed: some use defaults, some override
+    let cmd = parse_command("points 100,50 200,100:5 300,150:2:8");
+    match cmd {
+        Some(Command::Points(points)) => {
+            assert_eq!(points.len(), 3);
+            // First point: no overrides
+            assert_eq!(points[0].color, None);
+            assert_eq!(points[0].size, None);
+            // Second point: color only
+            assert_eq!(points[1].color, Some(5));
+            assert_eq!(points[1].size, None);
+            // Third point: color and size
+            assert_eq!(points[2].color, Some(2));
+            assert_eq!(points[2].size, Some(8));
+        }
+        _ => panic!("Expected Points command"),
+    }
+}
+
+// ===================
+// Attributed Point Execution Tests
+// ===================
+
+#[test]
+fn test_execute_points_with_per_point_color() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0); // Black (default)
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1;
+
+    let y = CANVAS_TOP + 100;
+    // Draw points with different colors
+    let cmd = Command::Points(vec![
+        AttributedPoint { x: 100, y, color: Some(2), size: None }, // Red
+        AttributedPoint { x: 150, y, color: Some(7), size: None }, // Green
+        AttributedPoint { x: 200, y, color: None, size: None },    // Uses default (Black)
+    ]);
+    execute_command(
+        &cmd,
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Verify each point has the correct color
+    assert_eq!(buffer[y * WIDTH + 100], COLOR_PALETTE[2], "Point at 100 should be red");
+    assert_eq!(buffer[y * WIDTH + 150], COLOR_PALETTE[7], "Point at 150 should be green");
+    assert_eq!(buffer[y * WIDTH + 200], COLOR_PALETTE[0], "Point at 200 should be black (default)");
+}
+
+#[test]
+fn test_execute_points_mixed_attributes() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0); // Black (default)
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 3; // Default size
+
+    let y = CANVAS_TOP + 100;
+    // Draw points: first uses defaults, second overrides color, third overrides both
+    let cmd = Command::Points(vec![
+        AttributedPoint { x: 100, y, color: None, size: None },       // Uses defaults
+        AttributedPoint { x: 200, y, color: Some(2), size: None },    // Red, default size
+        AttributedPoint { x: 300, y, color: Some(5), size: Some(8) }, // Yellow, size 8
+    ]);
+    execute_command(
+        &cmd,
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Verify colors
+    assert_eq!(buffer[y * WIDTH + 100], COLOR_PALETTE[0], "Point 1 should be black");
+    assert_eq!(buffer[y * WIDTH + 200], COLOR_PALETTE[2], "Point 2 should be red");
+    assert_eq!(buffer[y * WIDTH + 300], COLOR_PALETTE[5], "Point 3 should be yellow");
+
+    // Verify size for point 3 - nearby pixels should also be colored
+    // Size 8 means radius of 7, so pixels within 7 should be colored
+    assert_eq!(buffer[y * WIDTH + 305], COLOR_PALETTE[5], "Point 3 should have size 8");
+}
+
+#[test]
+fn test_execute_polyline_with_per_segment_color() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0); // Black (default)
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1;
+
+    let y = CANVAS_TOP + 100;
+    // Draw a rainbow line: segment colors are determined by the END point
+    let cmd = Command::Polyline(vec![
+        AttributedPoint { x: 100, y, color: None, size: None },    // Start point (no segment yet)
+        AttributedPoint { x: 200, y, color: Some(2), size: None }, // Red segment (100->200)
+        AttributedPoint { x: 300, y, color: Some(7), size: None }, // Green segment (200->300)
+    ]);
+    execute_command(
+        &cmd,
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // First segment (100->200) should be red (color from second point)
+    assert_eq!(buffer[y * WIDTH + 150], COLOR_PALETTE[2], "Middle of first segment should be red");
+
+    // Second segment (200->300) should be green (color from third point)
+    assert_eq!(buffer[y * WIDTH + 250], COLOR_PALETTE[7], "Middle of second segment should be green");
+}
+
+#[test]
+fn test_execute_polyline_with_per_segment_size() {
+    let mut buffer = new_buffer();
+    let mut edge_color_index: Option<usize> = Some(0); // Black
+    let mut fill_color_index: Option<usize> = None;
+    let mut size = 1; // Default size
+
+    let y = CANVAS_TOP + 100;
+    // Draw polyline with varying brush sizes
+    let cmd = Command::Polyline(vec![
+        AttributedPoint { x: 100, y, color: None, size: None },
+        AttributedPoint { x: 150, y, color: None, size: Some(1) },  // Thin segment
+        AttributedPoint { x: 200, y, color: None, size: Some(10) }, // Thick segment
+    ]);
+    execute_command(
+        &cmd,
+        &mut buffer,
+        &mut edge_color_index,
+        &mut fill_color_index,
+        &mut size,
+    );
+
+    // Thin segment should only affect the center line
+    assert_eq!(buffer[y * WIDTH + 125], BLACK, "Thin segment center");
+    assert_eq!(buffer[(y + 5) * WIDTH + 125], WHITE, "Thin segment should not extend far");
+
+    // Thick segment should affect nearby pixels
+    assert_eq!(buffer[y * WIDTH + 175], BLACK, "Thick segment center");
+    assert_eq!(buffer[(y + 5) * WIDTH + 175], BLACK, "Thick segment should extend");
 }
